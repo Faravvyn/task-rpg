@@ -8,7 +8,6 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'inline',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'assets/*.jpg'],
       manifest: {
         name: 'TaskRPG - Queste dein Leben',
         short_name: 'TaskRPG',
