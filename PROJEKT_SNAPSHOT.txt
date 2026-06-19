@@ -1,19 +1,28 @@
 ================================================================================
 TASK-RPG-PWA – ÜBERGABE-PROTOKOLL / VOLLSTÄNDIGER PROJEKT-SNAPSHOT
+<<<<<<< HEAD
 Erstellt: 2026-06-19
+=======
+Erstellt: 2026-05-30
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
 Format: >>>FILE: pfad/zur/datei ... >>>END
 Eine KI kann dieses Dokument einlesen und alle Dateien exakt rekonstruieren.
 ================================================================================
 
 HINWEISE:
   - package-lock.json & node_modules/ & dist/ ausgelassen (regenerierbar).
+<<<<<<< HEAD
   - Anzahl Dateien: 73
+=======
+  - Anzahl Dateien: 71
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
 ================================================================================
 
 >>>FILE: .env.example
 VITE_SUPABASE_URL=https://dein-projekt.supabase.co
 VITE_SUPABASE_ANON_KEY=dein-anon-key-hier
 >>>END
+<<<<<<< HEAD
 >>>FILE: .gitattributes
 # Zeilenenden automatisch behandeln
 * text=auto
@@ -29,6 +38,8 @@ VITE_SUPABASE_ANON_KEY=dein-anon-key-hier
 *.sql text eol=lf
 
 >>>END
+=======
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
 >>>FILE: .gitignore
 node_modules/
 dist/
@@ -42,10 +53,13 @@ dist/
 npm-debug.log*
 .turbo/
 >>>END
+<<<<<<< HEAD
 >>>FILE: .node-version
 22
 
 >>>END
+=======
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
 >>>FILE: UEBERGABE.md
 # TaskRPG – Übergabe-Protokoll
 
@@ -171,26 +185,44 @@ Ohne Supabase-Konfiguration → automatischer **localStorage-Fallback**.
 <html lang="de" class="dark">
   <head>
     <meta charset="UTF-8" />
+<<<<<<< HEAD
+=======
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#10121A" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TaskRPG" />
+<<<<<<< HEAD
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="TaskRPG – Alltagsaufgaben mit RPG-Gamification" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-512.svg" />
+=======
+    <meta name="description" content="TaskRPG – Alltagsaufgaben mit RPG-Gamification" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="apple-touch-icon" href="/icon-512.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <title>TaskRPG – Queste dein Leben</title>
   </head>
+<<<<<<< HEAD
   <body class="bg-dark-500 text-gray-100 font-body antialiased overflow-x-hidden selection:bg-gold-500/30">
+=======
+  <body class="bg-dark-500 text-gray-100 font-body antialiased">
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+<<<<<<< HEAD
 
+=======
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
 >>>END
 >>>FILE: netlify.toml
 [build]
@@ -7319,7 +7351,11 @@ Ohne Supabase-Konfiguration → automatischer **localStorage-Fallback**.
 {
   "name": "task-rpg-pwa",
   "private": true,
+<<<<<<< HEAD
   "version": "1.1.1",
+=======
+  "version": "1.1.0",
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -7403,21 +7439,43 @@ export default defineConfig({
         background_color: '#10121A',
         display: 'standalone',
         orientation: 'portrait',
+<<<<<<< HEAD
         start_url: '/',
+=======
+        start_url: '.',
+        scope: '/',
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
         icons: [
           {
             src: 'icon-512.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
+<<<<<<< HEAD
             purpose: 'any maskable'
+=======
+            purpose: 'any'
+          },
+          {
+            src: 'icon-512.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable'
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
           }
         ]
       },
       workbox: {
+<<<<<<< HEAD
         // Explicitly only cache essential assets to avoid conflicts
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg}'],
         maximumFileSizeToCacheInBytes: 5000000,
         navigateFallback: '/index.html'
+=======
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
+        maximumFileSizeToCacheInBytes: 5000000,
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true
+>>>>>>> e9af9165ee8e83e424ea7e9a2b22cb7acfecd7f2
       }
     })
   ],
