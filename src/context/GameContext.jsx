@@ -8,6 +8,8 @@ import { getSetXpBonusPercent, getWeekStartStr, ARENA_WIN_POINTS, applyXp } from
 import { getTodayEvent } from '../utils/achievements'
 import { formatDate } from '../utils/streak'
 import { fetchArenaWinCounts } from '../lib/adventureRepo'
+import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
+
 const GameContext = createContext({})
 const initialState = {
   tasks:[], completions:[], leaderboard:[], friends:[], friendRequests:[], challenges:[],
@@ -124,7 +126,6 @@ export function GameProvider({ children }) {
     if (user && character) { 
       fetchTasks(); fetchCompletions(); fetchLeaderboard(); fetchFriends(); fetchChallenges() 
       
-      // Realtime Subscriptions für Synchronisation zwischen Geräten
       const tasksChannel = supabase.channel('tasks_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${user.id}` }, () => fetchTasks())
         .subscribe()
@@ -174,7 +175,6 @@ export function GameProvider({ children }) {
     const baseXp = task.xp_reward || getXpReward(task.difficulty)
     const baseGold = getGoldReward(task.difficulty)
 
-    // --- Frenzy Logik (3 Tasks in 15 Min) ---
     const lastComps = state.completions.slice(0, 2)
     let frenzyActive = false
     if (lastComps.length === 2) {
@@ -182,7 +182,6 @@ export function GameProvider({ children }) {
       if (timeDiff < 15) frenzyActive = true
     }
 
-    // Stat-Boni
     const stats = character.stats || {}
     let finalXp = applyXp(baseXp, streak, {
       equippedArtifactIds: equippedArtifactIds || [],
@@ -204,7 +203,6 @@ export function GameProvider({ children }) {
     if (compError) return { error: compError }
     dispatch({ type: 'ADD_COMPLETION', payload: completion })
 
-    // --- Dungeon Fortschritt ---
     let newRoom = (character.dungeon_room || 0) + 1
     let newFloor = character.dungeon_floor || 1
     let foundChest = false
@@ -214,14 +212,11 @@ export function GameProvider({ children }) {
       foundChest = true
     }
 
-    // --- State Update ---
-    const oldLevel = calculateLevel(character.xp || 0).level
+    const oldLevel = Pr(character.xp || 0).level
     const nextXp = (character.xp || 0) + finalXp
-    const newLevelInfo = calculateLevel(nextXp)
+    const newLevelInfo = Pr(nextXp)
     
-    // Wöchentlicher Boss Schaden
-    let bossResult = null
-    try { bossResult = dealBossDamage?.(task.difficulty) } catch (e) { }
+    try { dealBossDamage?.(task.difficulty) } catch (e) { }
 
     const statKey = categoryStatMap[task.category]
     const currentStats = character.stats ? { ...character.stats } : { staerke:0, ausdauer:0, intelligenz:0, willenskraft:0, glueck:0 }
@@ -241,19 +236,26 @@ export function GameProvider({ children }) {
     if (newLevelInfo.level > oldLevel) {
       updates.bonus_points += 2
       updates.skill_points += 1
+      vibrate(VIBRATION_PATTERNS.LEVEL_UP)
       dispatch({ type: 'SHOW_LEVEL_UP' })
     }
 
-    const { data: updatedChar } = await updateCharacter(updates)
-    
-    if (foundChest) await grantRandomArtifact('common')
+    await updateCharacter(updates)
+    if (foundChest) {
+       vibrate(VIBRATION_PATTERNS.ITEM_DROP)
+       await grantRandomArtifact('common')
+    }
 
     if (event) {
       const rect = event.target.getBoundingClientRect()
+      const isCrit = finalXp > baseXp * 1.5
+      if (isCrit) vibrate(VIBRATION_PATTERNS.CRIT)
+      else vibrate(VIBRATION_PATTERNS.SUCCESS)
+
       dispatch({ type: 'SHOW_XP_POPUP', payload: { 
         xp: finalXp, 
         gold: finalGold, 
-        isCrit: finalXp > baseXp * 1.5,
+        isCrit,
         isFrenzy: frenzyActive,
         x: rect.left + rect.width / 2, 
         y: rect.top 
@@ -320,4 +322,5 @@ export function GameProvider({ children }) {
     </GameContext.Provider>
   )
 }
+const Pr = calculateLevel
 export default GameContext
