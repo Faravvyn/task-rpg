@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   TaskRPG – Globale Styles & benutzerdefinierte Komponenten
+   ========================================================= */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-dark-500 text-gray-100 font-body antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-title;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-400;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-50 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer components {
+  /* ---------- Karten ---------- */
+  .card {
+    @apply bg-dark-300 border border-gray-800 rounded-xl p-4 shadow-lg transition-colors duration-300;
+  }
+
+  .glass-card {
+    @apply bg-dark-300/70 backdrop-blur-md border border-gray-700/60 rounded-2xl shadow-xl;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-gradient-to-r from-gold-600 to-gold-400
+      text-dark-600 font-semibold rounded-xl px-4 py-2 shadow-md
+      transition-all duration-200 hover:from-gold-500 hover:to-gold-300
+      active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-dark-400 border border-gray-700
+      text-gray-200 font-semibold rounded-xl px-4 py-2
+      transition-all duration-200 hover:border-gray-500 hover:text-white
+      active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 bg-red-900/40 border border-red-700/50
+      text-red-300 font-semibold rounded-xl px-4 py-2
+      transition-all duration-200 hover:bg-red-900/60 hover:text-red-200
+      active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  /* ---------- Formularfelder ---------- */
+  .input-field {
+    @apply w-full bg-dark-400 border border-gray-700 rounded-xl px-4 py-2 text-gray-100
+      placeholder-gray-600 transition-colors duration-200
+      focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500/40;
+  }
+
+  /* ---------- Navigation ---------- */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400
+      transition-colors duration-200 hover:bg-dark-200 hover:text-gray-100;
+  }
+  .nav-link.active {
+    @apply bg-gold-500/10 text-gold-400 border border-gold-500/20;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tab-btn {
+    @apply px-4 py-2 rounded-lg text-sm font-semibold text-gray-400 bg-dark-300
+      border border-gray-800 transition-colors duration-200 hover:text-gray-200;
+  }
+  .tab-btn.active {
+    @apply bg-gold-500/10 text-gold-400 border-gold-500/30;
+  }
+
+  /* ---------- Badge ---------- */
+  .badge {
+    @apply inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full;
+  }
+
+  /* ---------- Stat-Balken ---------- */
+  .stat-bar {
+    @apply w-full h-2.5 bg-dark-400 rounded-full overflow-hidden;
+  }
+  .stat-bar-fill {
+    @apply h-full rounded-full transition-all duration-700 ease-out;
+  }
+
+  /* ---------- XP-Popup ---------- */
+  .xp-popup {
+    @apply pointer-events-none select-none animate-bounce-in;
+    animation: xpPopFloat 1.5s ease-out forwards;
+  }
+
+  /* ---------- Level-Up-Overlay ---------- */
+  .level-up-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-pointer;
+  }
+}
+
+@layer utilities {
+  /* Goldener Neon-Glow-Text */
+  .neon-glow {
+    text-shadow:
+      0 0 5px rgba(212, 160, 23, 0.6),
+      0 0 20px rgba(212, 160, 23, 0.45),
+      0 0 40px rgba(212, 160, 23, 0.25);
+  }
+}
+
+/* XP-Popup-Animation (schwebt nach oben + verblasst) */
+@keyframes xpPopFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(1);
+  }
+}
+
+/* Level-Up: aufsteigende Partikel */
+@keyframes levelUpRise {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+}
+
+/* Achievement-Pop */
+@keyframes achPop {
+  0%   { transform: scale(0.6) translateY(20px); opacity: 0; }
+  60%  { transform: scale(1.05) translateY(0); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.ach-pop { animation: achPop 0.5s cubic-bezier(0.68,-0.55,0.265,1.55) forwards; }
