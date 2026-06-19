@@ -7,7 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg', 'assets/*.jpg'],
+      injectRegister: 'inline',
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'assets/*.jpg'],
       manifest: {
         name: 'TaskRPG - Queste dein Leben',
         short_name: 'TaskRPG',
@@ -16,19 +17,28 @@ export default defineConfig({
         background_color: '#10121A',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: '.',
+        scope: '/',
         icons: [
           {
             src: 'icon-512.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'icon-512.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable'
           }
         ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
-        maximumFileSizeToCacheInBytes: 5000000 
+        maximumFileSizeToCacheInBytes: 5000000,
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true
       }
     })
   ],

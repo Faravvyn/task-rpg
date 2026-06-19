@@ -10,10 +10,6 @@ import { AdventureProvider } from './context/AdventureContext'
 import { AchievementProvider } from './context/AchievementContext'
 import { NotificationProvider } from './context/NotificationContext'
 import './index.css'
-import { registerSW } from 'virtual:pwa-register'
-
-// Automatisches Service Worker Update
-registerSW({ immediate: true })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
