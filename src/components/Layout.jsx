@@ -8,9 +8,10 @@ import NotificationBell from './NotificationBell'
 import LevelUpModal from './LevelUpModal'
 import DropReveal from './DropReveal'
 import AchievementToast from './AchievementToast'
+import MonsterBattle from './MonsterBattle'
 import { 
   LayoutDashboard, ListTodo, User, BarChart3, Trophy, 
-  Users, Swords, Settings, LogOut, Menu, X, Map, Bell, Award, Coins 
+  Users, Swords, Settings, LogOut, Menu, X, Map, Bell, Award, Coins, PawPrint 
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -22,6 +23,7 @@ const navItems = [
   { to:'/stats', icon:BarChart3, label:'Stats' },
   { to:'/leaderboard', icon:Trophy, label:'Rang' },
   { to:'/achievements', icon:Award, label:'Erfolge' },
+  { to:'/monsters', icon:PawPrint, label:'Monster' },
   { to:'/friends', icon:Users, label:'Freunde', badge:'friends' },
   { to:'/challenges', icon:Swords, label:'Duelle' },
   { to:'/notifications', icon:Bell, label:'Nachrichten', badge:'notifications' },
@@ -121,6 +123,7 @@ export default function Layout() {
       <LevelUpModal/>
       <DropReveal/>
       <AchievementToast/>
+      <MonsterBattle/>
     </div>
   )
 }

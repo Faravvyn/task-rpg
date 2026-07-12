@@ -22,6 +22,7 @@ import AchievementsPage from './pages/AchievementsPage'
 import LoadoutPage from './pages/LoadoutPage'
 import NotificationsPage from './pages/NotificationsPage'
 import RPGPage from './pages/RPGPage'
+import MonsterPage from './pages/MonsterPage'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="adventure/loadout" element={<LoadoutPage />} />
         <Route path="achievements" element={<AchievementsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="monsters" element={<MonsterPage />} />
       </Route>
       <Route path="/invite/:username" element={<InviteRedirect />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

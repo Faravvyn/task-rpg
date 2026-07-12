@@ -181,6 +181,38 @@ DROP POLICY IF EXISTS "Loadout schreiben" ON user_loadout; CREATE POLICY "Loadou
 DROP POLICY IF EXISTS "Loadout aendern" ON user_loadout;   CREATE POLICY "Loadout aendern"   ON user_loadout FOR UPDATE USING (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS idx_loadout_user ON user_loadout(user_id, week_start);
 
+-- 9. MONSTER SYSTEM
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_monsters (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  monster_id TEXT NOT NULL,               -- Katalog-ID aus src/utils/monsters.js
+  nickname TEXT,
+  level INTEGER DEFAULT 1,
+  xp INTEGER DEFAULT 0,
+  stat_points INTEGER DEFAULT 0,          -- Neue Spalte für Monster-Levelups
+  stats JSONB DEFAULT '{}',               -- { "hp": 50, "atk": 10, "def": 10 }
+  moves JSONB DEFAULT '[]',               -- ["tackle", "fireball"]
+  caught_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE user_monsters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "UM lesen" ON user_monsters;    CREATE POLICY "UM lesen"    ON user_monsters FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "UM schreiben" ON user_monsters; CREATE POLICY "UM schreiben" ON user_monsters FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "UM aendern" ON user_monsters;  CREATE POLICY "UM aendern"  ON user_monsters FOR UPDATE USING (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS idx_um_user ON user_monsters(user_id);
+
+CREATE TABLE IF NOT EXISTS user_teams (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  slot_1 UUID REFERENCES user_monsters(id) ON DELETE SET NULL,
+  slot_2 UUID REFERENCES user_monsters(id) ON DELETE SET NULL,
+  slot_3 UUID REFERENCES user_monsters(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE user_teams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Team lesen" ON user_teams;    CREATE POLICY "Team lesen"    ON user_teams FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Team schreiben" ON user_teams; CREATE POLICY "Team schreiben" ON user_teams FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Team aendern" ON user_teams;   CREATE POLICY "Team aendern"   ON user_teams FOR UPDATE USING (auth.uid() = user_id);
+
 -- =====================================================================
 -- RPCs
 -- =====================================================================

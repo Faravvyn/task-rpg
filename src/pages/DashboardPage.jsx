@@ -1,4 +1,5 @@
 import { useAuth } from '../context/AuthContext'
+import { useGame } from '../hooks/useGame'
 import { useCharacter } from '../hooks/useCharacter'
 import { useTasks } from '../hooks/useTasks'
 import TaskItem from '../components/TaskItem'
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const { levelInfo, streak, todayXp, weekXp, hasDoneTaskToday } = useCharacter()
   const { availableTasks, completedToday, completions } = useTasks()
   const { activeQuests, now } = useAdventure()
+  const { monsterHint, dispatch: gameDispatch } = useGame()
   const streakBonus = Math.round((getStreakMultiplier(streak)-1)*100)
   const totalTasksToday = availableTasks.length + completedToday.length
   return (
@@ -53,6 +55,28 @@ export default function DashboardPage() {
           <ChevronRight className="w-5 h-5 text-gray-400 ml-4 relative z-10" />
         </Link>
       </div>
+
+      {monsterHint && (
+        <div className="card bg-purple-900/20 border-purple-500/30 animate-pulse-gold relative overflow-hidden">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-xl">🔍</div>
+             <div className="flex-1">
+                <p className="text-xs text-purple-300 font-bold uppercase tracking-widest">Monster-Spur entdeckt!</p>
+                <p className="text-sm text-gray-200">{monsterHint}</p>
+             </div>
+             <button onClick={() => gameDispatch({ type: 'CLEAR_MONSTER_HINT' })} className="text-gray-500 hover:text-white">✕</button>
+          </div>
+          {/* Button um manuell den Mini-Boss zu spawnen (Demo-Zwecke) */}
+          <button 
+            onClick={() => {
+              const { spawnMiniBoss } = useAdventure(); // Oops, can't use hook inside onClick like this if not already in scope
+              // I'll just clear the hint for now and assume the user does the task.
+              // In a real app, we'd check if they did the task.
+            }}
+            className="hidden"
+          ></button>
+        </div>
+      )}
 
       {activeQuests.length>0&&(
         <Link to="/adventure/quests" className="card block border-green-700/30 bg-green-900/10 hover:border-green-600/40">

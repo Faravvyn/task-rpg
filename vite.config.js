@@ -27,6 +27,7 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // Explicitly only cache essential assets to avoid conflicts
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg}'],
         maximumFileSizeToCacheInBytes: 5000000,
         navigateFallback: '/index.html'

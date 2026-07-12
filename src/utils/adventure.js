@@ -6,6 +6,19 @@ import { getStreakMultiplier } from './xp'
 // Diese Datei hat KEINE Seiteneffekte und ist damit gut testbar.
 // =====================================================================
 
+export const BACKSTORY = {
+  dungeon: {
+    1: "Die Oberen Katakomben: Einst ein Lagerhaus für königliche Weinvorräte, nun von schleimigen Kreaturen überrannt.",
+    11: "Die Vergessene Bibliothek: Hier lagert das Wissen der alten Gelehrten, doch die Schatten haben von den Büchern Besitz ergriffen.",
+    21: "Der Brennende Abgrund: Ein Ort ewiger Hitze, in dem nur die widerstandsfähigsten Golems überleben.",
+  },
+  bosses: {
+    'Schattenkönig': "Der einstige Herrscher dieses Reiches, der durch seine eigene Gier in ewige Finsternis gestürzt wurde.",
+    'Frostgolem': "Ein Konstrukt aus den kältesten Wintern der Geschichte, erschaffen um den Eingang zum Archiv zu bewachen.",
+    'Flammendrache': "Ein uraltes Wesen, das tief unter der Erde schläft und nur durch die Störung der Dungeon-Ruhe erwacht.",
+  }
+}
+
 // ---------------------------------------------------------------------
 // Seltenheiten
 // ---------------------------------------------------------------------
@@ -201,11 +214,11 @@ export function getSetXpBonusPercent(ownedArtifactIds = []) {
 // Wöchentlicher Boss
 // ---------------------------------------------------------------------
 export const WEEKLY_BOSSES = [
-  { name: 'Schattenkönig', icon: '👑', baseHp: 800 },
-  { name: 'Frostgolem', icon: '🧊', baseHp: 1000 },
-  { name: 'Flammendrache', icon: '🐉', baseHp: 1400 },
-  { name: 'Leerenbestie', icon: '🦑', baseHp: 1200 },
-  { name: 'Sturmtitan', icon: '🌩️', baseHp: 1600 },
+  { name: 'Schattenkönig', icon: '👑', baseHp: 500, image: '/assets/boss_shadow_dragon.jpg' },
+  { name: 'Frostgolem', icon: '🧊', baseHp: 650, image: '/assets/boss_frost_golem.jpg' },
+  { name: 'Flammendrache', icon: '🐉', baseHp: 800, image: '/assets/boss_flame_dragon.jpg' },
+  { name: 'Leerenbestie', icon: '🦑', baseHp: 750, image: '/assets/boss_void_beast.jpg' },
+  { name: 'Sturmtitan', icon: '🌩️', baseHp: 1000, image: '/assets/boss_storm_titan.jpg' },
 ]
 
 export function getWeekStart(date = new Date()) {

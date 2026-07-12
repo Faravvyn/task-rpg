@@ -9,7 +9,10 @@ import StatDistribution from '../components/StatDistribution'
 import ArtifactCard from '../components/ArtifactCard'
 import EquipmentSlots from '../components/EquipmentSlots'
 import EmptyState from '../components/EmptyState'
-import { Edit3, Save, Shield, Swords, Package, Sparkles, Zap, Coins } from 'lucide-react'
+import { 
+  Edit3, Save, Shield, Swords, Package, Sparkles, 
+  Zap, Coins, ChevronRight 
+} from 'lucide-react'
 import { rarityInfo } from '../utils/adventure'
 import { Link } from 'react-router-dom'
 

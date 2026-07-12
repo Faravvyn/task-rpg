@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useCharacter } from '../hooks/useCharacter'
 import { SKILL_TREE } from '../utils/xp'
+import { BACKSTORY } from '../utils/adventure'
 import { 
   Skull, ShoppingBag, GraduationCap, Coins, 
   Map as MapIcon, ChevronRight, Lock, CheckCircle2, 
@@ -70,6 +71,12 @@ export default function RPGPage() {
       {/* DUNGEON TAB */}
       {tab === 'dungeon' && (
         <div className="space-y-4">
+          <div className="card bg-dark-400 border-gray-700 border-l-4 border-l-red-500">
+             <p className="text-xs italic text-gray-400">
+               {floor <= 10 ? BACKSTORY.dungeon[1] : floor <= 20 ? BACKSTORY.dungeon[11] : BACKSTORY.dungeon[21]}
+             </p>
+          </div>
+
           <div 
             className="card relative overflow-hidden bg-cover bg-center border-red-900/40 min-h-[200px] flex flex-col justify-end"
             style={{ backgroundImage: `linear-gradient(to top, rgba(16,18,26,0.95), rgba(16,18,26,0.4)), url(${getDungeonBg(floor)})` }}
@@ -107,7 +114,11 @@ export default function RPGPage() {
       {/* SHOP TAB */}
       {tab === 'shop' && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-400 px-1 italic">Der Alchemist bietet seltene Gebräue an...</p>
+          <div className="card h-40 bg-cover bg-center flex items-end p-4 border-gold-500/20" 
+               style={{ backgroundImage: "linear-gradient(to top, rgba(16,18,26,0.9), transparent), url('/assets/shop_bg.jpg')" }}>
+            <p className="text-sm text-gold-300 font-title drop-shadow-md">Willkommen im Archiv des Alchemisten...</p>
+          </div>
+          <p className="text-sm text-gray-400 px-1 italic">Tausche dein Gold gegen seltene Gebräue und Relikte.</p>
           {consumables.map(item => {
             const count = character.consumables?.[item.id] || 0
             return (

@@ -57,6 +57,16 @@ export const SPECIAL_QUESTS = [
     description: 'Probiere eine Sportart aus, die du noch nie gemacht hast.', xp: 85, dropChance: 0.65, minRarity: 'rare' },
   { id: 'visit_place', icon: '🗺️', title: 'Entdecker', category: 'sport',
     description: 'Besuche einen Ort in deiner Stadt, an dem du noch nie warst.', xp: 75, dropChance: 0.6, minRarity: 'rare' },
+  { id: 'morning_meditation', icon: '🧘', title: 'Stille am Morgen', category: 'gesundheit',
+    description: 'Meditiere für 10 Minuten nach dem Aufstehen.', xp: 50, dropChance: 0.4, minRarity: 'common' },
+  { id: 'coding_challenge', icon: '💻', title: 'Code-Meister', category: 'lernen',
+    description: 'Löse eine Programmier-Herausforderung oder lerne eine neue Funktion.', xp: 90, dropChance: 0.7, minRarity: 'epic' },
+  { id: 'volunteer_action', icon: '❤️', title: 'Ehrenamt', category: 'gesundheit',
+    description: 'Hilf bei einem lokalen Projekt oder einer sozialen Einrichtung.', xp: 120, dropChance: 0.8, minRarity: 'legendary' },
+  { id: 'wildlife_photo', icon: '📷', title: 'Wildtier-Fotograf', category: 'sport',
+    description: 'Fotografiere ein Tier in freier Wildbahn (Vogel, Eichhörnchen, etc.).', xp: 60, dropChance: 0.5, minRarity: 'rare' },
+  { id: 'no_fastfood', icon: '🥗', title: 'Gesunde Wahl', category: 'gesundheit',
+    description: 'Verzichte heute komplett auf Fast Food und Fertiggerichte.', xp: 70, dropChance: 0.5, minRarity: 'rare' },
 ]
 
 export const QUEST_MAP = Object.fromEntries(SPECIAL_QUESTS.map((q) => [q.id, q]))

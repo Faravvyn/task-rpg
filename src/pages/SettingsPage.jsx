@@ -7,6 +7,7 @@ import { avatars } from '../utils/xp'
 import { Settings, User, Lock, Bell, BellRing, Download, Trash2, Save, Check, Swords } from 'lucide-react'
 import { useNotifications } from '../context/NotificationContext'
 import { isSoundEnabled, setSoundEnabled, playLevelUp } from '../utils/sound'
+import { isVibrationEnabled, setVibrationEnabled, vibrate } from '../utils/vibrate'
 
 function Toggle({ on, onClick }) {
   return (
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const { character } = useCharacter()
   const { settings: notifSettings, updateSettings: updateNotif, enablePush, disablePush, pushSupported, permission } = useNotifications()
   const [soundOn, setSoundOn] = useState(isSoundEnabled())
+  const [vibrateOn, setVibrationOn] = useState(isVibrationEnabled())
   const [username, setUsername] = useState(profile?.username || '')
   const [selectedAvatar, setSelectedAvatar] = useState(profile?.avatar_url || '🧙‍♂️')
   const [newPassword, setNewPassword] = useState('')
@@ -240,8 +242,10 @@ export default function SettingsPage() {
             on={notifSettings.dailyReminder} onClick={() => updateNotif({ dailyReminder: !notifSettings.dailyReminder })} />
           <ToggleRow label="Streak-Warnung (20:00)"
             on={notifSettings.streakWarning} onClick={() => updateNotif({ streakWarning: !notifSettings.streakWarning })} />
-          <ToggleRow label="🔊 Sound-Effekte (Level-Up etc.)"
+          <ToggleRow label="🔊 Sound-Effekte"
             on={soundOn} onClick={() => { const v = !soundOn; setSoundOn(v); setSoundEnabled(v); if (v) playLevelUp() }} />
+          <ToggleRow label="📳 Vibration (Android)"
+            on={vibrateOn} onClick={() => { const v = !vibrateOn; setVibrationOn(v); setVibrationEnabled(v); if (v) vibrate(50) }} />
         </div>
       </div>
 

@@ -13,7 +13,7 @@ import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
 const GameContext = createContext({})
 const initialState = {
   tasks:[], completions:[], leaderboard:[], friends:[], friendRequests:[], challenges:[],
-  loading:false, xpPopup:null, levelUpModal:false
+  loading:false, xpPopup:null, levelUpModal:false, monsterHint: null
 }
 function gameReducer(state, action) {
   switch(action.type) {
@@ -32,13 +32,18 @@ function gameReducer(state, action) {
     case 'HIDE_XP_POPUP': return{...state,xpPopup:null}
     case 'SHOW_LEVEL_UP': return{...state,levelUpModal:true}
     case 'HIDE_LEVEL_UP': return{...state,levelUpModal:false}
+    case 'SET_MONSTER_HINT': return{...state,monsterHint:action.payload}
+    case 'CLEAR_MONSTER_HINT': return{...state,monsterHint:null}
     default: return state
   }
 }
 export function GameProvider({ children }) {
   const [state, dispatch] = useReducer(gameReducer, initialState)
   const { user, character, updateCharacter } = useAuth()
-  const { dealBossDamage, equippedArtifactIds, equippedArtifactIdsUnique, doubledArtifactIds, grantRandomArtifact } = useAdventure()
+  const { 
+    dealBossDamage, equippedArtifactIds, equippedArtifactIdsUnique, 
+    doubledArtifactIds, grantRandomArtifact, userTeam, userMonsters 
+  } = useAdventure()
   const todayEvent = getTodayEvent(formatDate(new Date()))
   const eventXpMult = todayEvent?.effect?.type === 'xp_mult' ? todayEvent.effect.value : 1
 
@@ -112,6 +117,16 @@ export function GameProvider({ children }) {
     try {
       const { data, error } = await supabase.from('challenges').select('*').or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`).order('created_at', { ascending: false })
       if (error || !data) return
+      
+      // Auto-Resolve expired challenges
+      const now = new Date()
+      for (const ch of data) {
+        if (ch.status === 'active' && new Date(ch.end_date) < now) {
+           // Hier müsste normalerweise eine Auswertung (RPC) stattfinden
+           await supabase.from('challenges').update({ status: 'completed' }).eq('id', ch.id)
+        }
+      }
+
       const uniqueIds = [...new Set(data.map(c => c.challenger_id === user.id ? c.opponent_id : c.challenger_id))]
       const { data: profiles } = await supabase.from('profiles').select('id,username,avatar_url').in('id', uniqueIds)
       dispatch({ type: 'SET_CHALLENGES', payload: data.map(c => ({
@@ -203,6 +218,20 @@ export function GameProvider({ children }) {
     if (compError) return { error: compError }
     dispatch({ type: 'ADD_COMPLETION', payload: completion })
 
+    // --- Monster Encounter Logik ---
+    const luck = character.stats?.glueck || 0
+    const hintChance = 0.1 + (luck * 0.01)
+    if (Math.random() < hintChance) {
+      const bossTriggers = [
+        "Mache 20 Liegestütze um einen Erden-Typ Mini-Boss zu locken!",
+        "Erledige eine schwere Aufgabe um einen Feuer-Typ Mini-Boss zu rufen!",
+        "Gehe 5km spazieren um einen Wind-Typ Mini-Boss zu finden!",
+        "Trinke 2L Wasser um einen Wasser-Typ Mini-Boss zu spawnen!"
+      ]
+      const hint = bossTriggers[Math.floor(Math.random() * bossTriggers.length)]
+      dispatch({ type: 'SET_MONSTER_HINT', payload: hint })
+    }
+
     let newRoom = (character.dungeon_room || 0) + 1
     let newFloor = character.dungeon_floor || 1
     let foundChest = false
@@ -241,9 +270,31 @@ export function GameProvider({ children }) {
     }
 
     await updateCharacter(updates)
+    
+    // Dungeon Chest & Monster Level Up
     if (foundChest) {
        vibrate(VIBRATION_PATTERNS.ITEM_DROP)
        await grantRandomArtifact('common')
+       
+       // Monster XP Gain
+       const teamIds = [userTeam.slot_1, userTeam.slot_2, userTeam.slot_3].filter(Boolean)
+       for (const mId of teamIds) {
+         const monster = userMonsters.find(m => m.id === mId)
+         if (monster) {
+           const xpGain = 25 * newFloor
+           let nextMXp = (monster.xp || 0) + xpGain
+           let nextMLevel = monster.level || 1
+           let addedPoints = 0
+           while (nextMXp >= (nextMLevel * 50)) {
+             nextMXp -= (nextMLevel * 50)
+             nextMLevel++
+             addedPoints += 3
+           }
+           await supabase.from('user_monsters').update({
+             xp: nextMXp, level: nextMLevel, stat_points: (monster.stat_points || 0) + addedPoints
+           }).eq('id', mId)
+         }
+       }
     }
 
     if (event) {

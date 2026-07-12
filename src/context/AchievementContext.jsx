@@ -157,6 +157,13 @@ export function AchievementProvider({ children }) {
     }
     if (newlyUnlocked.length > 0) {
       setUnlocked(next); persist(next)
+      
+      // Neue Quests freischalten Logik
+      const hasSpecialAchievement = newlyUnlocked.some(a => a.id === 'tasks_100')
+      if (hasSpecialAchievement) {
+         // In AdventureContext könnte man hier eine Flag setzen
+      }
+
       const totalXp = newlyUnlocked.reduce((s, it) => s + (it.rewardXp || 0), 0)
       if (totalXp > 0 && updateCharacter) {
         const c = charRef.current

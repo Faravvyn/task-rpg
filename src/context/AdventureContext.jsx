@@ -29,8 +29,11 @@ import {
   fetchLoadout, insertArtifact, updateArtifact, deleteArtifacts, 
   attackBoss, markBossLooted, insertArenaResult, insertQuestCompletion, 
   fetchFriendTasks, insertFriendTask, updateFriendTaskStatus, 
-  completeFriendTaskRpc, subscribeFriendTasks, upsertLoadout
+  completeFriendTaskRpc, subscribeFriendTasks, upsertLoadout,
+  fetchUserMonsters, insertUserMonster, fetchUserTeam, upsertUserTeam,
+  updateMonster
 } from '../lib/adventureRepo'
+import { MONSTERS, MONSTER_MAP, calculateMonsterXpForLevel } from '../utils/monsters'
 
 const AdventureContext = createContext({})
 
@@ -68,6 +71,9 @@ export function AdventureProvider({ children }) {
   const [now, setNow] = useState(Date.now())
   const [mailbox, setMailbox] = useState([])     // lokaler Fallback
   const [remoteFriendTasks, setRemoteFriendTasks] = useState([])  // Supabase
+  const [userMonsters, setUserMonsters] = useState([])
+  const [userTeam, setUserTeam] = useState({ slot_1: null, slot_2: null, slot_3: null })
+  const [activeMiniBoss, setActiveMiniBoss] = useState(null)
 
   const charRef = useRef(character)
   useEffect(() => { charRef.current = character }, [character])
@@ -83,16 +89,18 @@ export function AdventureProvider({ children }) {
     const buildFreshBoss = () => {
       const b = getBossForWeek(weekStart)
       const communitySeed = (weekStart.split('-').reduce((a, c) => a + parseInt(c, 10), 0) * 37) % 400
-      return { weekStart, name: b.name, icon: b.icon, maxHp: b.maxHp, hp: b.maxHp, myDamage: 0, communityDamage: communitySeed, defeated: false, looted: false }
+      return { weekStart, name: b.name, icon: b.icon, image: b.image, maxHp: b.maxHp, hp: b.maxHp, myDamage: 0, communityDamage: communitySeed, defeated: false, looted: false }
     }
 
     async function loadRemote() {
-      const [inventory, { bossRow, dmgRow }, arenaRows, questCompletions, slots] = await Promise.all([
+      const [inventory, { bossRow, dmgRow }, arenaRows, questCompletions, slots, monsters, team] = await Promise.all([
         fetchInventory(user.id),
         fetchBoss(user.id, weekStart),
         fetchArena(user.id, weekStart),
         fetchQuestCompletions(user.id),
         fetchLoadout(user.id, weekStart),
+        fetchUserMonsters(user.id),
+        fetchUserTeam(user.id),
       ])
       if (cancelled) return
       const base = getBossForWeek(weekStart)
@@ -101,6 +109,7 @@ export function AdventureProvider({ children }) {
       const maxHp = bossRow?.max_hp || base.maxHp
       const boss = {
         weekStart, name: bossRow?.name || base.name, icon: bossRow?.icon || base.icon,
+        image: base.image,
         maxHp, hp: Math.max(0, maxHp - totalDamage),
         myDamage, communityDamage: Math.max(0, totalDamage - myDamage),
         defeated: bossRow?.defeated || totalDamage >= maxHp, looted: !!dmgRow?.looted,
@@ -113,6 +122,8 @@ export function AdventureProvider({ children }) {
         craftCount: 0, questCompletions,
         loadout: { weekStart, slots: slots || {} },
       })
+      setUserMonsters(monsters)
+      if (team) setUserTeam({ slot_1: team.slot_1, slot_2: team.slot_2, slot_3: team.slot_3 })
       setLoaded(true)
     }
 
@@ -518,6 +529,50 @@ export function AdventureProvider({ children }) {
     return { reward }
   }, [user, updateCharacter, refreshFriendTasks, reloadCharacter])
 
+  // ---------------- Monster System ----------------
+  const catchMonster = useCallback(async (monsterId, nickname = null) => {
+    if (!user) return null
+    const m = MONSTER_MAP[monsterId]
+    if (!m) return null
+    
+    // Zufällige IVs (Individual Values) für Stats
+    const stats = {
+      hp: m.baseStats.hp + Math.floor(Math.random() * 10),
+      atk: m.baseStats.atk + Math.floor(Math.random() * 5),
+      def: m.baseStats.def + Math.floor(Math.random() * 5),
+    }
+
+    let caught
+    if (REMOTE) {
+      caught = await insertUserMonster(user.id, monsterId, stats, m.moves, nickname)
+    } else {
+      caught = { id: newUid(), monster_id: monsterId, stats, moves: m.moves, nickname, caught_at: new Date().toISOString(), level: 1, xp: 0 }
+    }
+    
+    if (caught) setUserMonsters(prev => [caught, ...prev])
+    return caught
+  }, [user, REMOTE])
+
+  const updateTeam = useCallback(async (slots) => {
+    if (!user) return
+    setUserTeam(slots)
+    if (REMOTE) {
+      await upsertUserTeam(user.id, slots)
+    }
+  }, [user, REMOTE])
+
+  const spawnMiniBoss = useCallback(() => {
+    const pool = MONSTERS.filter(m => m.rarity !== 'legendary')
+    const boss = pool[Math.floor(Math.random() * pool.length)]
+    setActiveMiniBoss({
+      ...boss,
+      hp: boss.baseStats.hp * 2,
+      maxHp: boss.baseStats.hp * 2,
+      isMiniBoss: true
+    })
+    return boss
+  }, [])
+
   // ---------------- DEV / Demo ----------------
   const grantRandomArtifact = useCallback((minRarity = 'common') => addArtifact(rollArtifact(minRarity).id, 'quest'), [addArtifact])
 
@@ -537,6 +592,8 @@ export function AdventureProvider({ children }) {
     questCatalog: SPECIAL_QUESTS, questMap: QUEST_MAP, now,
     friendTasks, pendingFriendTasksCount, sendFriendTask, acceptFriendTask, declineFriendTask, completeFriendTask,
     allArtifacts: ARTIFACTS,
+    userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss,
+    allMonsters: MONSTERS, monsterMap: MONSTER_MAP
   }
 
   return <AdventureContext.Provider value={value}>{children}</AdventureContext.Provider>

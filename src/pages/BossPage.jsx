@@ -39,7 +39,7 @@ export default function BossPage() {
 
       {/* Boss-Karte */}
       <div className={`card relative overflow-hidden ${boss.defeated ? 'border-green-700/40' : 'border-red-800/40'} min-h-[300px] flex flex-col justify-end bg-cover bg-center`}
-        style={{ backgroundImage: `linear-gradient(to top, rgba(16,18,26,1) 10%, rgba(16,18,26,0.3) 50%, rgba(16,18,26,0) 100%), url('/assets/boss_shadow_dragon.jpg')` }}
+        style={{ backgroundImage: `linear-gradient(to top, rgba(16,18,26,1) 10%, rgba(16,18,26,0.3) 50%, rgba(16,18,26,0) 100%), url(${boss.image || '/assets/boss_shadow_dragon.jpg'})` }}
       >
         <div className="relative z-10 p-2">
           <div className="flex items-center gap-4 mb-4">

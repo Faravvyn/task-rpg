@@ -185,6 +185,36 @@ export function subscribeFriendTasks(userId, onChange) {
 }
 
 // ---------------------------------------------------------------------
+// MONSTER SYSTEM
+// ---------------------------------------------------------------------
+export async function fetchUserMonsters(userId) {
+  const { data, error } = await supabase.from('user_monsters').select('*').eq('user_id', userId).order('caught_at', { ascending: false })
+  if (error) { console.warn('User Monsters:', error.message); return [] }
+  return data || []
+}
+
+export async function insertUserMonster(userId, monsterId, stats, moves, nickname = null) {
+  const { data, error } = await supabase.from('user_monsters').insert({
+    user_id: userId, monster_id: monsterId, stats, moves, nickname
+  }).select().single()
+  if (error) { console.warn('Monster catch error:', error.message); return null }
+  return data
+}
+
+export async function fetchUserTeam(userId) {
+  const { data, error } = await supabase.from('user_teams').select('*').eq('user_id', userId).maybeSingle()
+  if (error) { console.warn('User Team fetch:', error.message); return null }
+  return data
+}
+
+export async function upsertUserTeam(userId, slots) {
+  const { error } = await supabase.from('user_teams').upsert({
+    user_id: userId, ...slots, updated_at: new Date().toISOString()
+  })
+  if (error) console.warn('User Team upsert:', error.message)
+}
+
+// ---------------------------------------------------------------------
 // ACHIEVEMENTS
 // ---------------------------------------------------------------------
 export async function fetchUserAchievements(userId) {
@@ -210,6 +240,11 @@ export async function fetchLoadout(userId, weekStart) {
 export async function upsertLoadout(userId, weekStart, slots) {
   const { error } = await supabase.from('user_loadout').upsert({ user_id: userId, week_start: weekStart, slots, updated_at: new Date().toISOString() })
   if (error) console.warn('Loadout upsert:', error.message)
+}
+
+export async function updateMonster(monsterUid, updates) {
+  const { error } = await supabase.from('user_monsters').update(updates).eq('id', monsterUid)
+  if (error) console.warn('Monster update:', error.message)
 }
 
 // Wöchentliche Arena-Siege je Spieler (für Leaderboard-Wertung)
