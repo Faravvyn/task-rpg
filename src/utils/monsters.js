@@ -102,3 +102,10 @@ export const TYPE_CHART = {
 export function calculateMonsterXpForLevel(level) {
   return level * 50; // Einfache Skalierung: 50, 100, 150...
 }
+
+export function getMonsterImageUrl(monster) {
+  const id = monster.monster_id || monster.id;
+  const meta = MONSTER_MAP[id];
+  if (meta && meta.image) return meta.image;
+  return `https://api.dicebear.com/7.x/bottts/svg?seed=${id}&backgroundColor=10121a`;
+}

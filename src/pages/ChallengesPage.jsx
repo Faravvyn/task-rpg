@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useGame } from '../hooks/useGame'
-import { Swords, Clock, Trophy, Target, Zap, Flame, CheckCircle, XCircle, Plus } from 'lucide-react'
+import { Swords, Clock, Trophy, Target, Zap, Flame, CheckCircle, XCircle, Plus, PawPrint } from 'lucide-react'
 
 const challengeTypes = [
   { id: 'xp_duel', label: 'XP-Duell', icon: <Zap className="w-4 h-4" />, description: 'Wer sammelt mehr XP?' },
   { id: 'task_duel', label: 'Task-Duell', icon: <Target className="w-4 h-4" />, description: 'Wer erledigt mehr Tasks?' },
+  { id: 'monster_duel', label: 'Monster-Kampf', icon: <PawPrint className="w-4 h-4" />, description: '3v3 Monster Battle' },
   { id: 'streak_duel', label: 'Streak-Duell', icon: <Flame className="w-4 h-4" />, description: 'Wer hat den längeren Streak?' }
 ]
 

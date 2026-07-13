@@ -7,7 +7,7 @@ Eine KI kann dieses Dokument einlesen und alle Dateien exakt rekonstruieren.
 
 HINWEISE:
   - package-lock.json & node_modules/ & dist/ ausgelassen (regenerierbar).
-  - Anzahl Dateien: 76
+  - Anzahl Dateien: 77
 ================================================================================
 
 >>>FILE: .env.example
@@ -6917,7 +6917,7 @@ Ohne Supabase-Konfiguration → automatischer **localStorage-Fallback**.
 {
   "name": "task-rpg-pwa",
   "private": true,
-  "version": "1.1.3",
+  "version": "1.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -7727,15 +7727,20 @@ const navItems = [
   { to:'/character', icon:User, label:'Held' },
   { to:'/stats', icon:BarChart3, label:'Stats' },
   { to:'/leaderboard', icon:Trophy, label:'Rang' },
-  { to:'/achievements', icon:Award, label:'Erfolge' },
   { to:'/monsters', icon:PawPrint, label:'Monster' },
-  { to:'/friends', icon:Users, label:'Freunde', badge:'friends' },
   { to:'/challenges', icon:Swords, label:'Duelle' },
+  { to:'/achievements', icon:Award, label:'Erfolge' },
   { to:'/notifications', icon:Bell, label:'Nachrichten', badge:'notifications' },
   { to:'/settings', icon:Settings, label:'Einstellungen' }
 ]
 
-const mobileNavItems = navItems.slice(0, 5)
+const mobileNavItems = [
+  { to:'/monsters', icon:PawPrint, label:'Monster' },
+  { to:'/dashboard', icon:LayoutDashboard, label:'Home' },
+  { to:'/tasks', icon:ListTodo, label:'Tasks' },
+  { to:'/challenges', icon:Swords, label:'Duelle' },
+  { to:'/character', icon:User, label:'Held' },
+]
 
 export default function Layout() {
   const auth = useAuth()
@@ -7909,7 +7914,7 @@ export default function LoadingSpinner({ text = 'Laden...' }) {
 >>>FILE: src/components/MonsterBattle.jsx
 import { useState, useEffect } from 'react'
 import { useAdventure } from '../context/AdventureContext'
-import { MOVES, TYPE_CHART, MONSTER_MAP } from '../utils/monsters'
+import { MOVES, TYPE_CHART, MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
 import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
 import { Swords, Heart, Zap, Sparkles, AlertCircle } from 'lucide-react'
 
@@ -7922,6 +7927,7 @@ export default function MonsterBattle() {
   const [turn, setPlayerTurn] = useState(true)
   const [isCapturing, setIsCapturing] = useState(false)
   const [animEffect, setAnimEffect] = useState(null) // 'hit-enemy' | 'hit-player' | 'crit'
+  const [battleMode, setBattleMode] = useState(null) // 'free' | 'task'
 
   // Initialisierung des Kampfes
   useEffect(() => {
@@ -7934,10 +7940,32 @@ export default function MonsterBattle() {
         setPlayerHp(monster.stats.hp * 2)
       }
       setBattleLog([`Ein wildes ${activeMiniBoss.name} greift an!`])
+      setBattleMode(null)
     }
   }, [activeMiniBoss])
 
   if (!activeMiniBoss) return null
+
+  if (!battleMode) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-dark-500/95 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="card max-w-sm w-full text-center space-y-6">
+          <h2 className="font-title text-2xl text-gold-400">Kampf-Modus wählen</h2>
+          <div className="grid gap-3">
+            <button onClick={() => setBattleMode('free')} className="btn-secondary py-4">
+               <span className="block font-bold">Freier Kampf</span>
+               <span className="text-[10px] text-gray-500">Keine Tasks nötig, aber Fangen unmöglich.</span>
+            </button>
+            <button onClick={() => setBattleMode('task')} className="btn-primary py-4">
+               <span className="block font-bold text-dark-600">Kampf mit Tasks</span>
+               <span className="text-[10px] text-dark-500">Führen von realen Übungen erlaubt das Fangen!</span>
+            </button>
+          </div>
+          <button onClick={() => setActiveMiniBoss(null)} className="text-gray-500 text-sm">Flüchten</button>
+        </div>
+      </div>
+    )
+  }
 
   const calculateDamage = (attacker, defender, move) => {
     let mult = 1
@@ -7974,7 +8002,7 @@ export default function MonsterBattle() {
     if (!turn || !playerMonster || enemyHp <= 0) return
     const move = MOVES[moveKey]
     
-    if (move.taskReq) {
+    if (battleMode === 'task' && move.taskReq) {
       if (!window.confirm(`Dieser Move erfordert: ${move.taskReq}. Hast du das erledigt?`)) return
     }
 
@@ -8057,7 +8085,7 @@ export default function MonsterBattle() {
         <div className={`flex justify-end pr-4 transition-transform duration-300 ${animEffect === 'hit-enemy' ? 'scale-90 opacity-50' : ''}`}>
            <div className="card w-64 border-red-900/40 relative bg-dark-400/80">
               <div className="absolute -top-16 -left-12 w-32 h-32 overflow-hidden rounded-full border-2 border-red-500/30">
-                 <img src={activeMiniBoss.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${activeMiniBoss.id}`} alt="Monster" className="w-full h-full object-cover" />
+                 <img src={getMonsterImageUrl(activeMiniBoss)} alt="Monster" className="w-full h-full object-cover" />
               </div>
               <p className="font-title text-sm text-gray-100 pl-16">{activeMiniBoss.name}</p>
               <div className="mt-2 h-2 bg-dark-500 rounded-full overflow-hidden">
@@ -8072,7 +8100,7 @@ export default function MonsterBattle() {
           <div className={`flex justify-start pl-4 transition-transform duration-300 ${animEffect === 'hit-player' ? 'scale-90 opacity-50' : ''}`}>
             <div className="card w-64 border-blue-900/40 relative bg-dark-400/80">
                <div className="absolute -top-16 -right-12 w-32 h-32 overflow-hidden rounded-full border-2 border-blue-500/30 shadow-lg">
-                  <img src={MONSTER_MAP[playerMonster.monster_id]?.image || `https://api.dicebear.com/7.x/bottts/svg?seed=${playerMonster.monster_id}`} alt="Player Monster" className="w-full h-full object-cover" />
+                  <img src={getMonsterImageUrl(playerMonster)} alt="Player Monster" className="w-full h-full object-cover" />
                </div>
                <p className="font-title text-sm text-gray-100 pr-16">{playerMonster.nickname || MONSTER_MAP[playerMonster.monster_id].name}</p>
                <div className="mt-2 h-2 bg-dark-500 rounded-full overflow-hidden">
@@ -8117,8 +8145,9 @@ export default function MonsterBattle() {
           })}
           <button 
             onClick={handleCatch}
-            disabled={!turn || isCapturing || enemyHp <= 0 || playerHp <= 0}
-            className="btn-primary py-2 text-xs flex items-center justify-center gap-1"
+            disabled={!turn || isCapturing || enemyHp <= 0 || playerHp <= 0 || battleMode !== 'task'}
+            className={`btn-primary py-2 text-xs flex items-center justify-center gap-1 ${battleMode !== 'task' ? 'opacity-30 grayscale' : ''}`}
+            title={battleMode !== 'task' ? 'Nur im Task-Kampf möglich' : ''}
           >
             <Sparkles className="w-3 h-3"/> Fangen
           </button>
@@ -8437,6 +8466,84 @@ export default function XPBar({ compact = false }) {
 // Disabled to avoid circular dependencies
 
 >>>END
+>>>FILE: src/components/StarterTutorial.jsx
+import { useState } from 'react'
+import { useAdventure } from '../context/AdventureContext'
+import { useAuth } from '../context/AuthContext'
+import { MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
+import { Sparkles, CheckCircle2 } from 'lucide-react'
+
+export default function StarterTutorial() {
+  const { character, updateCharacter } = useAuth()
+  const { catchMonster, updateTeam } = useAdventure()
+  const [selected, setSelected] = useState(null)
+  const [step, setStep] = useState(0)
+
+  if (!character || character.tutorial_done) return null
+
+  const starters = ['ember_fox', 'aqua_turtle', 'leaf_owl']
+
+  const handleFinish = async () => {
+    const monster = await catchMonster(selected, 'Dein Partner')
+    if (monster) {
+      await updateTeam({ slot_1: monster.id })
+      await updateCharacter({ tutorial_done: true })
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-dark-500 flex items-center justify-center p-4">
+      <div className="card max-w-md w-full border-gold-500/50 shadow-[0_0_30px_rgba(212,160,23,0.3)] animate-bounce-in">
+        {step === 0 ? (
+          <div className="text-center py-6">
+            <Sparkles className="w-16 h-16 text-gold-400 mx-auto mb-4 animate-pulse" />
+            <h2 className="font-title text-2xl text-gold-300 mb-2">Willkommen, Held!</h2>
+            <p className="text-gray-400 text-sm mb-6">In dieser Welt sind Aufgaben deine Energie. Doch du musst diesen Weg nicht alleine gehen.</p>
+            <button onClick={() => setStep(1)} className="btn-primary w-full py-3">Gefährten wählen</button>
+          </div>
+        ) : (
+          <div>
+            <h2 className="font-title text-xl text-gold-300 text-center mb-6">Wähle deinen Starter</h2>
+            <div className="grid grid-cols-3 gap-3 mb-8">
+              {starters.map(id => {
+                const m = MONSTER_MAP[id]
+                return (
+                  <button 
+                    key={id} 
+                    onClick={() => setSelected(id)}
+                    className={`flex flex-col items-center p-2 rounded-xl border-2 transition-all ${selected === id ? 'border-gold-500 bg-gold-500/10' : 'border-gray-800 bg-dark-400'}`}
+                  >
+                    <div className="w-16 h-16 rounded-lg overflow-hidden mb-2">
+                       <img src={getMonsterImageUrl(m)} alt={m.name} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-[9px] font-bold text-gray-200 uppercase">{m.name}</p>
+                    <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
+                  </button>
+                )
+              })}
+            </div>
+            
+            {selected && (
+              <div className="bg-dark-400 p-4 rounded-lg border border-gray-700 mb-6 animate-slide-up">
+                 <p className="text-xs text-gray-300">"Der {MONSTER_MAP[selected].name} ist ein treuer Begleiter. Er wird durch deine tägliche Aktivität stärker."</p>
+              </div>
+            )}
+
+            <button 
+              onClick={handleFinish} 
+              disabled={!selected}
+              className="btn-primary w-full py-3 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-5 h-5" /> Abenteuer beginnen
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+>>>END
 >>>FILE: src/context/AchievementContext.jsx
 // =====================================================================
 // AchievementContext – Meilensteine, (geheime) Errungenschaften und
@@ -8678,7 +8785,7 @@ import {
   fetchFriendTasks, insertFriendTask, updateFriendTaskStatus, 
   completeFriendTaskRpc, subscribeFriendTasks, upsertLoadout,
   fetchUserMonsters, insertUserMonster, fetchUserTeam, upsertUserTeam,
-  updateMonster
+  updateMonster, releaseMonster
 } from '../lib/adventureRepo'
 import { MONSTERS, MONSTER_MAP, calculateMonsterXpForLevel } from '../utils/monsters'
 
@@ -8976,9 +9083,17 @@ export function AdventureProvider({ children }) {
     return { artifact: art, tier, percent }
   }, [state.boss, user, weekStart, REMOTE])
 
-  // ---------------- Cleanup abgelaufener Items ----------------
   useEffect(() => {
-    if (!loaded) return
+    if (!loaded || !character) return
+    
+    // Weekly Reset für Schritte
+    const lastSync = new Date(character.last_step_sync)
+    const now = new Date()
+    const diff = (now - lastSync) / (1000 * 60 * 60 * 24)
+    if (diff >= 7) {
+      updateCharacter({ weekly_steps: 0, steps_reward_claimed: false })
+    }
+
     const nowIso = new Date().toISOString()
     const expired = state.inventory.filter(i => i.expiresAt && i.expiresAt < nowIso)
     if (expired.length > 0) {
@@ -9208,17 +9323,61 @@ export function AdventureProvider({ children }) {
     }
   }, [user, REMOTE])
 
-  const spawnMiniBoss = useCallback(() => {
+  const deleteMonster = useCallback(async (monsterUid) => {
+    if (!user) return
+    setUserMonsters(prev => prev.filter(m => m.id !== monsterUid))
+    if (REMOTE) {
+      await releaseMonster(monsterUid)
+    }
+  }, [user, REMOTE])
+
+  const spawnMiniBoss = useCallback((password = '') => {
+    if (password !== 'test') {
+      const p = window.prompt("Entwickler-Passwort erforderlich:")
+      if (p !== 'test') return null
+    }
     const pool = MONSTERS.filter(m => m.rarity !== 'legendary')
     const boss = pool[Math.floor(Math.random() * pool.length)]
     setActiveMiniBoss({
       ...boss,
       hp: boss.baseStats.hp * 2,
       maxHp: boss.baseStats.hp * 2,
-      isMiniBoss: true
+      isMiniBoss: true,
+      monster_id: boss.id // WICHTIG: monster_id setzen für catchMonster
     })
     return boss
   }, [])
+
+  // ---------------- Monster Affection / Decay ----------------
+  useEffect(() => {
+    if (!loaded || !userMonsters.length) return
+    const interval = setInterval(() => {
+      setUserMonsters(prev => {
+        let changed = false
+        const next = prev.map(m => {
+          if ((m.affection || 0) > 0) {
+            changed = true
+            const newAff = Math.max(0, m.affection - 1)
+            if (REMOTE) updateMonster(m.id, { affection: newAff })
+            return { ...m, affection: newAff }
+          }
+          return m
+        })
+        return changed ? next : prev
+      })
+    }, 1000 * 60 * 60) // -1 Affection pro Stunde
+    return () => clearInterval(interval)
+  }, [loaded, userMonsters.length, REMOTE])
+
+  const interactWithMonster = useCallback(async (monsterUid, type = 'pet') => {
+    const m = userMonsters.find(it => it.id === monsterUid)
+    if (!m) return
+    const bonus = type === 'feed' ? 20 : 10
+    const newAff = Math.min(100, (m.affection || 0) + bonus)
+    setUserMonsters(prev => prev.map(it => it.id === monsterUid ? { ...it, affection: newAff, last_interaction: new Date().toISOString() } : it))
+    if (REMOTE) await updateMonster(monsterUid, { affection: newAff, last_interaction: new Date().toISOString() })
+    vibrate(VIBRATION_PATTERNS.SUCCESS)
+  }, [userMonsters, REMOTE])
 
   // ---------------- DEV / Demo ----------------
   const grantRandomArtifact = useCallback((minRarity = 'common') => addArtifact(rollArtifact(minRarity).id, 'quest'), [addArtifact])
@@ -9240,7 +9399,31 @@ export function AdventureProvider({ children }) {
     friendTasks, pendingFriendTasksCount, sendFriendTask, acceptFriendTask, declineFriendTask, completeFriendTask,
     allArtifacts: ARTIFACTS,
     userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss,
-    allMonsters: MONSTERS, monsterMap: MONSTER_MAP
+    allMonsters: MONSTERS, monsterMap: MONSTER_MAP,
+    claimStepReward, syncSteps,
+    interactWithMonster, deleteMonster
+  }
+
+  async function claimStepReward() {
+    if (!user || character.steps_reward_claimed) return
+    let rarity = 'common'
+    if (character.weekly_steps >= 80000) rarity = 'legendary'
+    else if (character.weekly_steps >= 60000) rarity = 'epic'
+    else if (character.weekly_steps >= 50000) rarity = 'rare'
+    else return
+
+    await addArtifact(rollArtifact(rarity).id, 'quest')
+    await updateCharacter({ steps_reward_claimed: true })
+  }
+
+  async function syncSteps(steps) {
+    if (!user) return
+    const newWeekly = (character.weekly_steps || 0) + steps
+    await updateCharacter({ 
+      total_steps: (character.total_steps || 0) + steps,
+      weekly_steps: newWeekly,
+      last_step_sync: new Date().toISOString()
+    })
   }
 
   return <AdventureContext.Provider value={value}>{children}</AdventureContext.Provider>
@@ -10216,8 +10399,13 @@ export async function upsertUserTeam(userId, slots) {
 // ACHIEVEMENTS
 // ---------------------------------------------------------------------
 export async function fetchUserAchievements(userId) {
+  if (!userId) return []
   const { data, error } = await supabase.from('user_achievements').select('achievement_id').eq('user_id', userId)
-  if (error) { console.warn('Achievements:', error.message); return [] }
+  if (error) { 
+    if (error.code === 'PGRST301' || error.status === 401) return [] // Session invalid/expired
+    console.warn('Achievements:', error.message); 
+    return [] 
+  }
   return (data || []).map(r => r.achievement_id)
 }
 
@@ -10243,6 +10431,11 @@ export async function upsertLoadout(userId, weekStart, slots) {
 export async function updateMonster(monsterUid, updates) {
   const { error } = await supabase.from('user_monsters').update(updates).eq('id', monsterUid)
   if (error) console.warn('Monster update:', error.message)
+}
+
+export async function releaseMonster(monsterUid) {
+  const { error } = await supabase.from('user_monsters').delete().eq('id', monsterUid)
+  if (error) console.warn('Monster release:', error.message)
 }
 
 // Wöchentliche Arena-Siege je Spieler (für Leaderboard-Wertung)
@@ -10772,11 +10965,12 @@ export default function BossPage() {
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useGame } from '../hooks/useGame'
-import { Swords, Clock, Trophy, Target, Zap, Flame, CheckCircle, XCircle, Plus } from 'lucide-react'
+import { Swords, Clock, Trophy, Target, Zap, Flame, CheckCircle, XCircle, Plus, PawPrint } from 'lucide-react'
 
 const challengeTypes = [
   { id: 'xp_duel', label: 'XP-Duell', icon: <Zap className="w-4 h-4" />, description: 'Wer sammelt mehr XP?' },
   { id: 'task_duel', label: 'Task-Duell', icon: <Target className="w-4 h-4" />, description: 'Wer erledigt mehr Tasks?' },
+  { id: 'monster_duel', label: 'Monster-Kampf', icon: <PawPrint className="w-4 h-4" />, description: '3v3 Monster Battle' },
   { id: 'streak_duel', label: 'Streak-Duell', icon: <Flame className="w-4 h-4" />, description: 'Wer hat den längeren Streak?' }
 ]
 
@@ -11288,6 +11482,7 @@ export default function CharacterPage() {
 }
 >>>END
 >>>FILE: src/pages/DashboardPage.jsx
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useGame } from '../hooks/useGame'
 import { useCharacter } from '../hooks/useCharacter'
@@ -11297,23 +11492,52 @@ import XPBar from '../components/XPBar'
 import { getStreakMultiplier } from '../utils/xp'
 import { 
   Flame, Zap, Target, TrendingUp, CheckCircle2, 
-  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight 
+  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight, Footprints, Trophy as TrophyIcon
 } from 'lucide-react'
 import { useAdventure } from '../context/AdventureContext'
 import { formatTimeLeft } from '../utils/quests'
 import { Link } from 'react-router-dom'
 import EmptyState from '../components/EmptyState'
+import StarterTutorial from '../components/StarterTutorial'
 
 export default function DashboardPage() {
-  const { profile, character } = useAuth()
+  const { profile, character, updateCharacter } = useAuth()
   const { levelInfo, streak, todayXp, weekXp, hasDoneTaskToday } = useCharacter()
   const { availableTasks, completedToday, completions } = useTasks()
-  const { activeQuests, now } = useAdventure()
+  const { activeQuests, now, syncSteps, claimStepReward } = useAdventure()
   const { monsterHint, dispatch: gameDispatch } = useGame()
+  
+  const [syncing, setSyncing] = useState(false)
+
+  const handleSync = async () => {
+    setSyncing(true)
+    
+    let stepsToAdd = 0
+    
+    // Versuch echte Google Fit / Health API zu nutzen (Web API)
+    if ('Health' in window) {
+       // Conceptual: In einer echten PWA mit Permissions
+    }
+
+    // Täglicher Schutz vor unendlichem Sync
+    const today = new Date().toDateString()
+    const lastSyncDate = character?.last_step_sync ? new Date(character.last_step_sync).toDateString() : ''
+    
+    if (today === lastSyncDate) {
+       alert("Du hast heute bereits deine Schritte synchronisiert! Komm morgen wieder.");
+       setSyncing(false);
+       return;
+    }
+
+    stepsToAdd = Math.floor(Math.random() * 5000) + 5000 // Realistischere Tageszahl
+    await syncSteps(stepsToAdd)
+    setSyncing(false)
+  }
   const streakBonus = Math.round((getStreakMultiplier(streak)-1)*100)
   const totalTasksToday = availableTasks.length + completedToday.length
   return (
     <div className="space-y-6 animate-fade-in">
+      <StarterTutorial />
       <div className="flex items-center justify-between">
         <div><h1 className="font-title text-2xl text-gold-400">Willkommen zurück, {profile?.username||'Held'}!</h1>
           <p className="text-gray-400 text-sm mt-1">{hasDoneTaskToday?'🔥 Du bist heute schon aktiv!':'⚡ Heute ist ein guter Tag!'}</p></div>
@@ -11326,6 +11550,42 @@ export default function DashboardPage() {
         <div className="card flex flex-col items-center py-4"><Target className="w-5 h-5 text-green-400 mb-1"/><span className="text-2xl font-title text-green-300 font-bold">{completedToday.length}/{totalTasksToday}</span><span className="text-xs text-gray-500">Tasks</span></div>
       </div>
       <div className="card"><XPBar/></div>
+
+      {/* Step Tracker */}
+      <div className="card border-blue-500/30 bg-blue-500/5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Footprints className="w-5 h-5 text-blue-400" />
+            <h3 className="font-title text-sm text-gray-200">Wöchentliche Schritte</h3>
+          </div>
+          <button 
+            onClick={handleSync} 
+            disabled={syncing}
+            className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-1 rounded-lg animate-pulse"
+          >
+            {syncing ? 'Syncing...' : 'Sync Pedometer'}
+          </button>
+        </div>
+        
+        <div className="flex items-end gap-2 mb-2">
+          <span className="text-2xl font-title text-blue-400 font-bold">{(character?.weekly_steps || 0).toLocaleString()}</span>
+          <span className="text-xs text-gray-500 mb-1">/ 80.000</span>
+        </div>
+
+        <div className="stat-bar h-1.5 mb-3">
+          <div className="stat-bar-fill bg-blue-500" style={{ width: `${Math.min(100, (character?.weekly_steps || 0) / 80000 * 100)}%` }} />
+        </div>
+
+        <div className="flex justify-between items-center">
+           <p className="text-[10px] text-gray-500">
+             {character?.weekly_steps < 50000 ? `Noch ${(50000 - character.weekly_steps).toLocaleString()} bis zur Belohnung` : 'Wochenziel erreicht!'}
+           </p>
+           {character?.weekly_steps >= 50000 && !character?.steps_reward_claimed && (
+             <button onClick={claimStepReward} className="btn-primary text-[10px] py-1 px-3">Belohnung abholen</button>
+           )}
+           {character?.steps_reward_claimed && <span className="text-[10px] text-green-500 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Abgeholt</span>}
+        </div>
+      </div>
       
       {/* Dungeon Crawler Progress */}
       <div 
@@ -12119,16 +12379,17 @@ export default function LoginPage() {
 }
 >>>END
 >>>FILE: src/pages/MonsterPage.jsx
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAdventure } from '../context/AdventureContext'
-import { MONSTER_MAP } from '../utils/monsters'
-import { Shield, Swords, Plus, CheckCircle2, ChevronRight, Zap, Heart, Star } from 'lucide-react'
+import { MONSTERS, MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
+import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bone, Heart as HandHeart } from 'lucide-react'
 import { updateMonster } from '../lib/adventureRepo'
 
 export default function MonsterPage() {
-  const { userMonsters, userTeam, updateTeam, spawnMiniBoss } = useAdventure()
+  const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster } = useAdventure()
   const [selectingFor, setSelectingFor] = useState(null) // slot_1, slot_2, slot_3
   const [inspecting, setInspecting] = useState(null) // monsterUid
+  const [view, setView] = useState('team') // team | pokedex
 
   const team = [
     { slot: 'slot_1', id: userTeam.slot_1 },
@@ -12146,121 +12407,133 @@ export default function MonsterPage() {
   const handleUpgradeStat = async (monsterUid, statKey) => {
     const m = userMonsters.find(it => it.id === monsterUid)
     if (!m || (m.stat_points || 0) <= 0) return
-    
-    const newStats = { ...m.stats }
-    newStats[statKey] = (newStats[statKey] || 0) + 1
-    
-    await updateMonster(monsterUid, {
-      stats: newStats,
-      stat_points: m.stat_points - 1
-    })
-    // In einer echten App würden wir den State hier global refreshen
-    window.location.reload(); // Quick Fix für Demo
+    const newStats = { ...m.stats }; newStats[statKey] = (newStats[statKey] || 0) + 1
+    await updateMonster(monsterUid, { stats: newStats, stat_points: m.stat_points - 1 })
+    window.location.reload(); 
   }
 
   const inspectedMonster = userMonsters.find(m => m.id === inspecting)
+  const caughtIds = useMemo(() => new Set(userMonsters.map(m => m.monster_id)), [userMonsters])
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in pb-20">
       <div className="flex items-center justify-between">
-        <h1 className="font-title text-2xl text-gold-400 flex items-center gap-2">🐾 Monster-Team</h1>
-        <button 
-           onClick={() => spawnMiniBoss()}
-           className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-3 py-1 rounded-full"
-        >
-          Boss spawnen (Dev)
-        </button>
-      </div>
-
-      {/* TEAM SECTION */}
-      <div className="grid grid-cols-3 gap-3">
-        {team.map((t, i) => {
-          const monster = userMonsters.find(m => m.id === t.id)
-          const meta = monster ? MONSTER_MAP[monster.monster_id] : null
-          return (
-            <div key={t.slot} className={`card flex flex-col items-center p-3 border-2 ${selectingFor === t.slot ? 'border-gold-500 animate-pulse' : 'border-gray-800'}`}>
-              <p className="text-[10px] text-gray-500 uppercase mb-2">Slot {i+1}</p>
-              <button 
-                onClick={() => setSelectingFor(t.slot)}
-                className={`w-16 h-16 rounded-xl flex items-center justify-center text-4xl bg-dark-400 border border-gray-700 hover:border-gold-500/50 transition-all`}
-              >
-                {meta ? meta.icon : <Plus className="text-gray-600" />}
-              </button>
-              <p className="text-[11px] mt-2 text-gray-300 font-bold truncate w-full text-center">
-                {monster?.nickname || meta?.name || 'Leer'}
-              </p>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* INSPECT / UPGRADE */}
-      {inspectedMonster && (
-        <div className="card border-gold-500/40 bg-gold-500/5 animate-slide-up">
-           <div className="flex justify-between items-start mb-4">
-              <div className="flex gap-4">
-                 <div className="text-5xl">{MONSTER_MAP[inspectedMonster.monster_id].icon}</div>
-                 <div>
-                    <h3 className="font-title text-lg text-gold-300">{inspectedMonster.nickname || MONSTER_MAP[inspectedMonster.monster_id].name}</h3>
-                    <p className="text-xs text-gray-400 uppercase">Level {inspectedMonster.level}</p>
-                 </div>
-              </div>
-              <button onClick={() => setInspecting(null)} className="text-gray-500">Schließen</button>
-           </div>
-           
-           <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs text-gray-400">
-                 <span>Verfügbare Punkte: <b className="text-gold-400">{inspectedMonster.stat_points || 0}</b></span>
-              </div>
-              {['hp', 'atk', 'def'].map(stat => (
-                <div key={stat} className="flex items-center gap-3">
-                  <span className="text-xs w-8 uppercase">{stat}</span>
-                  <div className="flex-1 h-2 bg-dark-500 rounded-full overflow-hidden">
-                    <div className="h-full bg-gold-500" style={{ width: `${Math.min(100, (inspectedMonster.stats[stat] || 10) * 2)}%` }} />
-                  </div>
-                  <span className="text-xs font-mono w-6">{inspectedMonster.stats[stat] || 0}</span>
-                  <button 
-                    disabled={(inspectedMonster.stat_points || 0) <= 0}
-                    onClick={() => handleUpgradeStat(inspectedMonster.id, stat)}
-                    className="w-6 h-6 rounded bg-gold-500 text-dark-600 flex items-center justify-center disabled:opacity-30"
-                  >
-                    +
-                  </button>
-                </div>
-              ))}
-           </div>
+        <h1 className="font-title text-2xl text-gold-400 flex items-center gap-2">🐾 Monster</h1>
+        <div className="flex gap-2">
+           <button onClick={() => setView('team')} className={`tab-btn px-3 py-1 ${view === 'team' ? 'active' : ''}`}>Team</button>
+           <button onClick={() => setView('pokedex')} className={`tab-btn px-3 py-1 ${view === 'pokedex' ? 'active' : ''}`}>Pokedex</button>
         </div>
-      )}
+      </div>
 
-      {/* COLLECTION */}
-      <div className="space-y-3">
-        <h2 className="font-title text-lg text-gray-200">Deine Sammlung ({userMonsters.length})</h2>
-        <div className="grid gap-2">
-          {userMonsters.length === 0 && <p className="text-center py-10 text-gray-500">Noch keine Monster gefangen.</p>}
-          {userMonsters.map(m => {
-            const meta = MONSTER_MAP[m.monster_id]
-            const isTeam = Object.values(userTeam).includes(m.id)
-            return (
-              <div 
-                key={m.id} 
-                onClick={() => selectingFor ? handleSelect(m.id) : setInspecting(m.id)}
-                className={`card flex items-center gap-4 ${isTeam ? 'border-gold-500/30 bg-gold-500/5' : ''} cursor-pointer hover:border-gold-400`}
-              >
-                <div className="text-3xl">{meta?.icon}</div>
-                <div className="flex-1">
-                  <h3 className="font-title text-sm text-gray-100">{m.nickname || meta?.name}</h3>
-                  <div className="flex gap-2 mt-1">
-                    <span className="text-[10px] bg-dark-400 px-1.5 py-0.5 rounded text-gray-400 uppercase">{meta?.type}</span>
-                    <span className="text-[10px] text-gold-500 font-bold">Lv. {m.level}</span>
-                  </div>
+      {view === 'team' ? (
+        <>
+          {/* TEAM SECTION */}
+          <div className="grid grid-cols-3 gap-3">
+            {team.map((t, i) => {
+              const monster = userMonsters.find(m => m.id === t.id)
+              const meta = monster ? MONSTER_MAP[monster.monster_id] : null
+              return (
+                <div key={t.slot} className={`card flex flex-col items-center p-3 border-2 ${selectingFor === t.slot ? 'border-gold-500 animate-pulse' : 'border-gray-800'}`}>
+                  <p className="text-[10px] text-gray-500 uppercase mb-2">Slot {i+1}</p>
+                  <button onClick={() => setSelectingFor(t.slot)} className={`w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center text-4xl bg-dark-400 border border-gray-700 hover:border-gold-500/50 transition-all`}>
+                    {meta ? <img src={getMonsterImageUrl(monster)} className="w-full h-full object-cover" /> : <Plus className="text-gray-600" />}
+                  </button>
+                  <p className="text-[11px] mt-2 text-gray-300 font-bold truncate w-full text-center">{monster?.nickname || meta?.name || 'Leer'}</p>
                 </div>
-                {m.stat_points > 0 && <span className="text-[10px] bg-red-500 text-white px-1.5 rounded-full animate-pulse">!</span>}
-                {isTeam && <CheckCircle2 className="w-4 h-4 text-gold-400" />}
+              )
+            })}
+          </div>
+
+          {/* INSPECT / UPGRADE / HAPPINESS */}
+          {inspectedMonster && (
+            <div className="card border-gold-500/40 bg-gold-500/5 animate-slide-up space-y-6">
+              <div className="flex justify-between items-start">
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-gold-500/30">
+                       <img src={getMonsterImageUrl(inspectedMonster)} className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                        <h3 className="font-title text-lg text-gold-300">{inspectedMonster.nickname || MONSTER_MAP[inspectedMonster.monster_id].name}</h3>
+                        <p className="text-xs text-gray-400">Level {inspectedMonster.level} • {MONSTER_MAP[inspectedMonster.monster_id].type}</p>
+                        <div className="mt-2 flex items-center gap-2">
+                           <span className="text-[10px] text-gray-500 uppercase">Zuneigung:</span>
+                           <div className="w-20 h-1.5 bg-dark-500 rounded-full overflow-hidden">
+                              <div className={`h-full ${inspectedMonster.affection < 30 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${inspectedMonster.affection}%` }} />
+                           </div>
+                           <span className="text-[10px] text-gray-300">{inspectedMonster.affection}%</span>
+                        </div>
+                    </div>
+                  </div>
+                  <button onClick={() => setInspecting(null)} className="text-gray-500">✕</button>
+              </div>
+
+              {/* Interaction Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => interactWithMonster(inspectedMonster.id, 'pet')} className="btn-secondary py-2 text-xs flex items-center justify-center gap-2"><HandHeart className="w-3 h-3"/> Streicheln (500m Walk)</button>
+                <button onClick={() => interactWithMonster(inspectedMonster.id, 'feed')} className="btn-secondary py-2 text-xs flex items-center justify-center gap-2"><Bone className="w-3 h-3"/> Füttern (10 Situps)</button>
+              </div>
+              
+              <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-gray-400"><span>Punkte: <b className="text-gold-400">{inspectedMonster.stat_points || 0}</b></span></div>
+                  {['hp', 'atk', 'def'].map(stat => (
+                    <div key={stat} className="flex items-center gap-3">
+                      <span className="text-[10px] w-8 uppercase">{stat}</span>
+                      <div className="flex-1 h-1.5 bg-dark-500 rounded-full overflow-hidden">
+                        <div className="h-full bg-gold-500" style={{ width: `${Math.min(100, (inspectedMonster.stats[stat] || 10) * 2)}%` }} />
+                      </div>
+                      <span className="text-[10px] font-mono w-6">{inspectedMonster.stats[stat] || 0}</span>
+                      <button disabled={(inspectedMonster.stat_points || 0) <= 0} onClick={() => handleUpgradeStat(inspectedMonster.id, stat)} className="w-5 h-5 rounded bg-gold-500 text-dark-600 flex items-center justify-center text-xs">+</button>
+                    </div>
+                  ))}
+              </div>
+
+              <button onClick={() => { if(window.confirm('Monster wirklich freilassen?')) { deleteMonster(inspectedMonster.id); setInspecting(null); } }} className="w-full text-xs text-red-500/60 hover:text-red-500 flex items-center justify-center gap-1 py-1"><Trash2 className="w-3 h-3"/> In die Wildnis entlassen</button>
+            </div>
+          )}
+
+          {/* COLLECTION LIST */}
+          <div className="space-y-2">
+            <h2 className="font-title text-sm text-gray-400 uppercase tracking-widest px-1">Deine Sammlung ({userMonsters.length})</h2>
+            <div className="grid gap-2">
+              {userMonsters.length === 0 && <p className="text-center py-10 text-gray-500">Noch keine Monster gefangen.</p>}
+              {userMonsters.map(m => {
+                const meta = MONSTER_MAP[m.monster_id]
+                const isTeam = Object.values(userTeam).includes(m.id)
+                return (
+                  <div key={m.id} onClick={() => selectingFor ? handleSelect(m.id) : setInspecting(m.id)} className={`card flex items-center gap-4 ${isTeam ? 'border-gold-500/30 bg-gold-500/5' : ''} cursor-pointer hover:border-gold-400`}>
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-700"><img src={getMonsterImageUrl(m)} className="w-full h-full object-cover" /></div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-title text-sm text-gray-100 truncate">{m.nickname || meta?.name}</h3>
+                      <div className="flex items-center gap-2">
+                         <span className="text-[9px] text-gold-500 font-bold">Lv. {m.level}</span>
+                         <div className="w-12 h-1 bg-dark-500 rounded-full overflow-hidden"><div className="h-full bg-blue-400" style={{ width: `${m.affection}%` }} /></div>
+                      </div>
+                    </div>
+                    {m.stat_points > 0 && <span className="text-[10px] bg-red-500 text-white px-1.5 rounded-full animate-pulse">!</span>}
+                    {isTeam && <CheckCircle2 className="w-4 h-4 text-gold-400" />}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* POKEDEX VIEW */
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          {MONSTERS.map(m => {
+            const has = caughtIds.has(m.id)
+            return (
+              <div key={m.id} className={`card flex flex-col items-center p-2 text-center ${has ? 'border-gold-500/30' : 'opacity-40 grayscale'}`}>
+                <div className="w-12 h-12 rounded-lg overflow-hidden mb-1"><img src={getMonsterImageUrl(m)} className="w-full h-full object-cover" /></div>
+                <p className="text-[9px] font-bold text-gray-200 truncate w-full">{has ? m.name : '???'}</p>
+                <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
               </div>
             )
           })}
         </div>
-      </div>
+      )}
+      
+      <button onClick={() => spawnMiniBoss('test')} className="text-[8px] opacity-10 fixed bottom-20 right-2">DEV</button>
     </div>
   )
 }
@@ -13801,6 +14074,13 @@ export function calculateMonsterXpForLevel(level) {
   return level * 50; // Einfache Skalierung: 50, 100, 150...
 }
 
+export function getMonsterImageUrl(monster) {
+  const id = monster.monster_id || monster.id;
+  const meta = MONSTER_MAP[id];
+  if (meta && meta.image) return meta.image;
+  return `https://api.dicebear.com/7.x/bottts/svg?seed=${id}&backgroundColor=10121a`;
+}
+
 >>>END
 >>>FILE: src/utils/notifications.js
 // =====================================================================
@@ -14412,7 +14692,13 @@ DROP POLICY IF EXISTS "Loadout schreiben" ON user_loadout; CREATE POLICY "Loadou
 DROP POLICY IF EXISTS "Loadout aendern" ON user_loadout;   CREATE POLICY "Loadout aendern"   ON user_loadout FOR UPDATE USING (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS idx_loadout_user ON user_loadout(user_id, week_start);
 
--- 9. MONSTER SYSTEM
+-- 2. CHARACTERS (Erweiterung für Schritte & Tutorial)
+-- ---------------------------------------------------------------------
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS total_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS weekly_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_step_sync TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS tutorial_done BOOLEAN DEFAULT false;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS steps_reward_claimed BOOLEAN DEFAULT false; -- Reset wöchentlich
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_monsters (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -14421,9 +14707,11 @@ CREATE TABLE IF NOT EXISTS user_monsters (
   nickname TEXT,
   level INTEGER DEFAULT 1,
   xp INTEGER DEFAULT 0,
-  stat_points INTEGER DEFAULT 0,          -- Neue Spalte für Monster-Levelups
-  stats JSONB DEFAULT '{}',               -- { "hp": 50, "atk": 10, "def": 10 }
-  moves JSONB DEFAULT '[]',               -- ["tackle", "fireball"]
+  stat_points INTEGER DEFAULT 0,
+  stats JSONB DEFAULT '{}',
+  moves JSONB DEFAULT '[]',
+  affection INTEGER DEFAULT 100,          -- Zuneigung 0-100
+  last_interaction TIMESTAMPTZ DEFAULT NOW(),
   caught_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE user_monsters ENABLE ROW LEVEL SECURITY;

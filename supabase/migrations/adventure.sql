@@ -181,7 +181,13 @@ DROP POLICY IF EXISTS "Loadout schreiben" ON user_loadout; CREATE POLICY "Loadou
 DROP POLICY IF EXISTS "Loadout aendern" ON user_loadout;   CREATE POLICY "Loadout aendern"   ON user_loadout FOR UPDATE USING (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS idx_loadout_user ON user_loadout(user_id, week_start);
 
--- 9. MONSTER SYSTEM
+-- 2. CHARACTERS (Erweiterung für Schritte & Tutorial)
+-- ---------------------------------------------------------------------
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS total_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS weekly_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_step_sync TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS tutorial_done BOOLEAN DEFAULT false;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS steps_reward_claimed BOOLEAN DEFAULT false; -- Reset wöchentlich
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_monsters (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -190,9 +196,11 @@ CREATE TABLE IF NOT EXISTS user_monsters (
   nickname TEXT,
   level INTEGER DEFAULT 1,
   xp INTEGER DEFAULT 0,
-  stat_points INTEGER DEFAULT 0,          -- Neue Spalte für Monster-Levelups
-  stats JSONB DEFAULT '{}',               -- { "hp": 50, "atk": 10, "def": 10 }
-  moves JSONB DEFAULT '[]',               -- ["tackle", "fireball"]
+  stat_points INTEGER DEFAULT 0,
+  stats JSONB DEFAULT '{}',
+  moves JSONB DEFAULT '[]',
+  affection INTEGER DEFAULT 100,          -- Zuneigung 0-100
+  last_interaction TIMESTAMPTZ DEFAULT NOW(),
   caught_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE user_monsters ENABLE ROW LEVEL SECURITY;

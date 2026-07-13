@@ -31,7 +31,7 @@ import {
   fetchFriendTasks, insertFriendTask, updateFriendTaskStatus, 
   completeFriendTaskRpc, subscribeFriendTasks, upsertLoadout,
   fetchUserMonsters, insertUserMonster, fetchUserTeam, upsertUserTeam,
-  updateMonster
+  updateMonster, releaseMonster
 } from '../lib/adventureRepo'
 import { MONSTERS, MONSTER_MAP, calculateMonsterXpForLevel } from '../utils/monsters'
 
@@ -329,9 +329,17 @@ export function AdventureProvider({ children }) {
     return { artifact: art, tier, percent }
   }, [state.boss, user, weekStart, REMOTE])
 
-  // ---------------- Cleanup abgelaufener Items ----------------
   useEffect(() => {
-    if (!loaded) return
+    if (!loaded || !character) return
+    
+    // Weekly Reset für Schritte
+    const lastSync = new Date(character.last_step_sync)
+    const now = new Date()
+    const diff = (now - lastSync) / (1000 * 60 * 60 * 24)
+    if (diff >= 7) {
+      updateCharacter({ weekly_steps: 0, steps_reward_claimed: false })
+    }
+
     const nowIso = new Date().toISOString()
     const expired = state.inventory.filter(i => i.expiresAt && i.expiresAt < nowIso)
     if (expired.length > 0) {
@@ -561,17 +569,61 @@ export function AdventureProvider({ children }) {
     }
   }, [user, REMOTE])
 
-  const spawnMiniBoss = useCallback(() => {
+  const deleteMonster = useCallback(async (monsterUid) => {
+    if (!user) return
+    setUserMonsters(prev => prev.filter(m => m.id !== monsterUid))
+    if (REMOTE) {
+      await releaseMonster(monsterUid)
+    }
+  }, [user, REMOTE])
+
+  const spawnMiniBoss = useCallback((password = '') => {
+    if (password !== 'test') {
+      const p = window.prompt("Entwickler-Passwort erforderlich:")
+      if (p !== 'test') return null
+    }
     const pool = MONSTERS.filter(m => m.rarity !== 'legendary')
     const boss = pool[Math.floor(Math.random() * pool.length)]
     setActiveMiniBoss({
       ...boss,
       hp: boss.baseStats.hp * 2,
       maxHp: boss.baseStats.hp * 2,
-      isMiniBoss: true
+      isMiniBoss: true,
+      monster_id: boss.id // WICHTIG: monster_id setzen für catchMonster
     })
     return boss
   }, [])
+
+  // ---------------- Monster Affection / Decay ----------------
+  useEffect(() => {
+    if (!loaded || !userMonsters.length) return
+    const interval = setInterval(() => {
+      setUserMonsters(prev => {
+        let changed = false
+        const next = prev.map(m => {
+          if ((m.affection || 0) > 0) {
+            changed = true
+            const newAff = Math.max(0, m.affection - 1)
+            if (REMOTE) updateMonster(m.id, { affection: newAff })
+            return { ...m, affection: newAff }
+          }
+          return m
+        })
+        return changed ? next : prev
+      })
+    }, 1000 * 60 * 60) // -1 Affection pro Stunde
+    return () => clearInterval(interval)
+  }, [loaded, userMonsters.length, REMOTE])
+
+  const interactWithMonster = useCallback(async (monsterUid, type = 'pet') => {
+    const m = userMonsters.find(it => it.id === monsterUid)
+    if (!m) return
+    const bonus = type === 'feed' ? 20 : 10
+    const newAff = Math.min(100, (m.affection || 0) + bonus)
+    setUserMonsters(prev => prev.map(it => it.id === monsterUid ? { ...it, affection: newAff, last_interaction: new Date().toISOString() } : it))
+    if (REMOTE) await updateMonster(monsterUid, { affection: newAff, last_interaction: new Date().toISOString() })
+    vibrate(VIBRATION_PATTERNS.SUCCESS)
+  }, [userMonsters, REMOTE])
 
   // ---------------- DEV / Demo ----------------
   const grantRandomArtifact = useCallback((minRarity = 'common') => addArtifact(rollArtifact(minRarity).id, 'quest'), [addArtifact])
@@ -593,7 +645,31 @@ export function AdventureProvider({ children }) {
     friendTasks, pendingFriendTasksCount, sendFriendTask, acceptFriendTask, declineFriendTask, completeFriendTask,
     allArtifacts: ARTIFACTS,
     userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss,
-    allMonsters: MONSTERS, monsterMap: MONSTER_MAP
+    allMonsters: MONSTERS, monsterMap: MONSTER_MAP,
+    claimStepReward, syncSteps,
+    interactWithMonster, deleteMonster
+  }
+
+  async function claimStepReward() {
+    if (!user || character.steps_reward_claimed) return
+    let rarity = 'common'
+    if (character.weekly_steps >= 80000) rarity = 'legendary'
+    else if (character.weekly_steps >= 60000) rarity = 'epic'
+    else if (character.weekly_steps >= 50000) rarity = 'rare'
+    else return
+
+    await addArtifact(rollArtifact(rarity).id, 'quest')
+    await updateCharacter({ steps_reward_claimed: true })
+  }
+
+  async function syncSteps(steps) {
+    if (!user) return
+    const newWeekly = (character.weekly_steps || 0) + steps
+    await updateCharacter({ 
+      total_steps: (character.total_steps || 0) + steps,
+      weekly_steps: newWeekly,
+      last_step_sync: new Date().toISOString()
+    })
   }
 
   return <AdventureContext.Provider value={value}>{children}</AdventureContext.Provider>

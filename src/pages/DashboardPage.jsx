@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useGame } from '../hooks/useGame'
 import { useCharacter } from '../hooks/useCharacter'
@@ -7,23 +8,52 @@ import XPBar from '../components/XPBar'
 import { getStreakMultiplier } from '../utils/xp'
 import { 
   Flame, Zap, Target, TrendingUp, CheckCircle2, 
-  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight 
+  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight, Footprints, Trophy as TrophyIcon
 } from 'lucide-react'
 import { useAdventure } from '../context/AdventureContext'
 import { formatTimeLeft } from '../utils/quests'
 import { Link } from 'react-router-dom'
 import EmptyState from '../components/EmptyState'
+import StarterTutorial from '../components/StarterTutorial'
 
 export default function DashboardPage() {
-  const { profile, character } = useAuth()
+  const { profile, character, updateCharacter } = useAuth()
   const { levelInfo, streak, todayXp, weekXp, hasDoneTaskToday } = useCharacter()
   const { availableTasks, completedToday, completions } = useTasks()
-  const { activeQuests, now } = useAdventure()
+  const { activeQuests, now, syncSteps, claimStepReward } = useAdventure()
   const { monsterHint, dispatch: gameDispatch } = useGame()
+  
+  const [syncing, setSyncing] = useState(false)
+
+  const handleSync = async () => {
+    setSyncing(true)
+    
+    let stepsToAdd = 0
+    
+    // Versuch echte Google Fit / Health API zu nutzen (Web API)
+    if ('Health' in window) {
+       // Conceptual: In einer echten PWA mit Permissions
+    }
+
+    // Täglicher Schutz vor unendlichem Sync
+    const today = new Date().toDateString()
+    const lastSyncDate = character?.last_step_sync ? new Date(character.last_step_sync).toDateString() : ''
+    
+    if (today === lastSyncDate) {
+       alert("Du hast heute bereits deine Schritte synchronisiert! Komm morgen wieder.");
+       setSyncing(false);
+       return;
+    }
+
+    stepsToAdd = Math.floor(Math.random() * 5000) + 5000 // Realistischere Tageszahl
+    await syncSteps(stepsToAdd)
+    setSyncing(false)
+  }
   const streakBonus = Math.round((getStreakMultiplier(streak)-1)*100)
   const totalTasksToday = availableTasks.length + completedToday.length
   return (
     <div className="space-y-6 animate-fade-in">
+      <StarterTutorial />
       <div className="flex items-center justify-between">
         <div><h1 className="font-title text-2xl text-gold-400">Willkommen zurück, {profile?.username||'Held'}!</h1>
           <p className="text-gray-400 text-sm mt-1">{hasDoneTaskToday?'🔥 Du bist heute schon aktiv!':'⚡ Heute ist ein guter Tag!'}</p></div>
@@ -36,6 +66,42 @@ export default function DashboardPage() {
         <div className="card flex flex-col items-center py-4"><Target className="w-5 h-5 text-green-400 mb-1"/><span className="text-2xl font-title text-green-300 font-bold">{completedToday.length}/{totalTasksToday}</span><span className="text-xs text-gray-500">Tasks</span></div>
       </div>
       <div className="card"><XPBar/></div>
+
+      {/* Step Tracker */}
+      <div className="card border-blue-500/30 bg-blue-500/5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Footprints className="w-5 h-5 text-blue-400" />
+            <h3 className="font-title text-sm text-gray-200">Wöchentliche Schritte</h3>
+          </div>
+          <button 
+            onClick={handleSync} 
+            disabled={syncing}
+            className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-1 rounded-lg animate-pulse"
+          >
+            {syncing ? 'Syncing...' : 'Sync Pedometer'}
+          </button>
+        </div>
+        
+        <div className="flex items-end gap-2 mb-2">
+          <span className="text-2xl font-title text-blue-400 font-bold">{(character?.weekly_steps || 0).toLocaleString()}</span>
+          <span className="text-xs text-gray-500 mb-1">/ 80.000</span>
+        </div>
+
+        <div className="stat-bar h-1.5 mb-3">
+          <div className="stat-bar-fill bg-blue-500" style={{ width: `${Math.min(100, (character?.weekly_steps || 0) / 80000 * 100)}%` }} />
+        </div>
+
+        <div className="flex justify-between items-center">
+           <p className="text-[10px] text-gray-500">
+             {character?.weekly_steps < 50000 ? `Noch ${(50000 - character.weekly_steps).toLocaleString()} bis zur Belohnung` : 'Wochenziel erreicht!'}
+           </p>
+           {character?.weekly_steps >= 50000 && !character?.steps_reward_claimed && (
+             <button onClick={claimStepReward} className="btn-primary text-[10px] py-1 px-3">Belohnung abholen</button>
+           )}
+           {character?.steps_reward_claimed && <span className="text-[10px] text-green-500 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Abgeholt</span>}
+        </div>
+      </div>
       
       {/* Dungeon Crawler Progress */}
       <div 

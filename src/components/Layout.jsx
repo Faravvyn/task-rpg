@@ -22,15 +22,20 @@ const navItems = [
   { to:'/character', icon:User, label:'Held' },
   { to:'/stats', icon:BarChart3, label:'Stats' },
   { to:'/leaderboard', icon:Trophy, label:'Rang' },
-  { to:'/achievements', icon:Award, label:'Erfolge' },
   { to:'/monsters', icon:PawPrint, label:'Monster' },
-  { to:'/friends', icon:Users, label:'Freunde', badge:'friends' },
   { to:'/challenges', icon:Swords, label:'Duelle' },
+  { to:'/achievements', icon:Award, label:'Erfolge' },
   { to:'/notifications', icon:Bell, label:'Nachrichten', badge:'notifications' },
   { to:'/settings', icon:Settings, label:'Einstellungen' }
 ]
 
-const mobileNavItems = navItems.slice(0, 5)
+const mobileNavItems = [
+  { to:'/monsters', icon:PawPrint, label:'Monster' },
+  { to:'/dashboard', icon:LayoutDashboard, label:'Home' },
+  { to:'/tasks', icon:ListTodo, label:'Tasks' },
+  { to:'/challenges', icon:Swords, label:'Duelle' },
+  { to:'/character', icon:User, label:'Held' },
+]
 
 export default function Layout() {
   const auth = useAuth()

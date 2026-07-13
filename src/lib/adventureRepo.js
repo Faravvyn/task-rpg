@@ -218,8 +218,13 @@ export async function upsertUserTeam(userId, slots) {
 // ACHIEVEMENTS
 // ---------------------------------------------------------------------
 export async function fetchUserAchievements(userId) {
+  if (!userId) return []
   const { data, error } = await supabase.from('user_achievements').select('achievement_id').eq('user_id', userId)
-  if (error) { console.warn('Achievements:', error.message); return [] }
+  if (error) { 
+    if (error.code === 'PGRST301' || error.status === 401) return [] // Session invalid/expired
+    console.warn('Achievements:', error.message); 
+    return [] 
+  }
   return (data || []).map(r => r.achievement_id)
 }
 
@@ -245,6 +250,11 @@ export async function upsertLoadout(userId, weekStart, slots) {
 export async function updateMonster(monsterUid, updates) {
   const { error } = await supabase.from('user_monsters').update(updates).eq('id', monsterUid)
   if (error) console.warn('Monster update:', error.message)
+}
+
+export async function releaseMonster(monsterUid) {
+  const { error } = await supabase.from('user_monsters').delete().eq('id', monsterUid)
+  if (error) console.warn('Monster release:', error.message)
 }
 
 // Wöchentliche Arena-Siege je Spieler (für Leaderboard-Wertung)
