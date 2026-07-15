@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTasks } from '../hooks/useTasks'
 import TaskItem from '../components/TaskItem'
 import EmptyState from '../components/EmptyState'
-import { Plus, X, Camera } from 'lucide-react'
+import { Plus, X, Camera, Footprints } from 'lucide-react'
 const categories=[{id:'haushalt',label:'🏠 Haushalt'},{id:'gesundheit',label:'💊 Gesundheit'},{id:'lernen',label:'📚 Lernen'},{id:'arbeit',label:'💼 Arbeit'},{id:'sport',label:'🏋️ Sport'},{id:'custom',label:'✏️ Eigenes...'}]
 const difficulties=[{id:'leicht',label:'Leicht',xp:10,color:'text-green-400'},{id:'mittel',label:'Mittel',xp:25,color:'text-yellow-400'},{id:'schwer',label:'Schwer',xp:50,color:'text-red-400'}]
 const repeatTypes=[{id:'einmalig',label:'Einmalig'},{id:'taeglich',label:'Täglich'},{id:'woechentlich',label:'Wöchentlich'}]
@@ -13,8 +13,8 @@ export default function TasksPage() {
   const [filterCategory,setFilterCategory]=useState('all')
   const [tab,setTab]=useState('open')
   const [formError,setFormError]=useState('')
-  const [form,setForm]=useState({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:''})
-  const resetForm=()=>{setForm({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:''});setShowForm(false);setEditingTask(null);setFormError('')}
+  const [form,setForm]=useState({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:'',verification_value:''})
+  const resetForm=()=>{setForm({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:'',verification_value:''});setShowForm(false);setEditingTask(null);setFormError('')}
   const handleSubmit=async(e)=>{
     e.preventDefault(); if(!form.title.trim()) return; setFormError('')
     const category=form.category==='custom'?form.customCategory.toLowerCase():form.category
@@ -24,7 +24,8 @@ export default function TasksPage() {
       difficulty:form.difficulty,
       repeat_type:form.repeat_type,
       verification_type:form.verification_type,
-      verification_target:form.verification_target.trim() || null
+      verification_target:form.verification_target.trim() || null,
+      verification_value: form.verification_type === 'steps' ? parseInt(form.verification_value) : null
     }
     if(editingTask){const{error}=await editTask(editingTask.id,payload);if(error){setFormError('Fehler: '+(error.message||'Unbekannt'));return}}
     else{const{error}=await createTask(payload);if(error){setFormError('Fehler: '+(error.message||'Unbekannt'));return}}
@@ -39,7 +40,8 @@ export default function TasksPage() {
       difficulty:task.difficulty,
       repeat_type:task.repeat_type,
       verification_type:task.verification_type||'none',
-      verification_target:task.verification_target||''
+      verification_target:task.verification_target||'',
+      verification_value:task.verification_value||''
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -65,10 +67,16 @@ export default function TasksPage() {
               <div className="flex gap-2">
                 <button type="button" onClick={()=>setForm({...form,verification_type:'none'})} className={`flex-1 py-2 rounded-lg border text-xs ${form.verification_type==='none'?'border-gold-500 bg-gold-500/10 text-gold-300':'border-gray-700 text-gray-500'}`}>Keine</button>
                 <button type="button" onClick={()=>setForm({...form,verification_type:'photo'})} className={`flex-1 py-2 rounded-lg border text-xs flex items-center justify-center gap-1 ${form.verification_type==='photo'?'border-purple-500 bg-purple-500/10 text-purple-300':'border-gray-700 text-gray-500'}`}><Camera className="w-3 h-3"/> Foto</button>
+                <button type="button" onClick={()=>setForm({...form,verification_type:'steps'})} className={`flex-1 py-2 rounded-lg border text-xs flex items-center justify-center gap-1 ${form.verification_type==='steps'?'border-blue-500 bg-blue-500/10 text-blue-300':'border-gray-700 text-gray-500'}`}><Footprints className="w-3 h-3"/> Schritte</button>
               </div>
               {form.verification_type==='photo' && (
                 <div className="mt-2">
                   <input type="text" value={form.verification_target} onChange={e=>setForm({...form,verification_target:e.target.value})} placeholder="Was muss fotografiert werden? (z.B. Pflanze)" className="input-field text-sm" />
+                </div>
+              )}
+              {form.verification_type==='steps' && (
+                <div className="mt-2">
+                  <input type="number" value={form.verification_value} onChange={e=>setForm({...form,verification_value:e.target.value})} placeholder="Benötigte Schritte (z.B. 10000)" className="input-field text-sm" />
                 </div>
               )}
             </div>

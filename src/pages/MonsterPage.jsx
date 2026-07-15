@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useAdventure } from '../context/AdventureContext'
 import { MONSTERS, MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
-import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bone, Heart as HandHeart } from 'lucide-react'
+import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bone, Heart as HandHeart, BookOpen } from 'lucide-react'
 import { updateMonster } from '../lib/adventureRepo'
 
 export default function MonsterPage() {
   const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster } = useAdventure()
   const [selectingFor, setSelectingFor] = useState(null) // slot_1, slot_2, slot_3
   const [inspecting, setInspecting] = useState(null) // monsterUid
-  const [view, setView] = useState('team') // team | pokedex
+  const [view, setView] = useState('team') // team | lexicon
 
   const team = [
     { slot: 'slot_1', id: userTeam.slot_1 },
@@ -39,8 +39,8 @@ export default function MonsterPage() {
       <div className="flex items-center justify-between">
         <h1 className="font-title text-2xl text-gold-400 flex items-center gap-2">🐾 Monster</h1>
         <div className="flex gap-2">
-           <button onClick={() => setView('team')} className={`tab-btn px-3 py-1 ${view === 'team' ? 'active' : ''}`}>Team</button>
-           <button onClick={() => setView('pokedex')} className={`tab-btn px-3 py-1 ${view === 'pokedex' ? 'active' : ''}`}>Pokedex</button>
+           <button onClick={() => setView('team')} className={`tab-btn px-3 py-1 flex items-center gap-1 ${view === 'team' ? 'active' : ''}`}><Swords className="w-3 h-3" /> Team</button>
+           <button onClick={() => setView('lexicon')} className={`tab-btn px-3 py-1 flex items-center gap-1 ${view === 'lexicon' ? 'active' : ''}`}><BookOpen className="w-3 h-3" /> Lexicon</button>
         </div>
       </div>
 
@@ -137,18 +137,32 @@ export default function MonsterPage() {
           </div>
         </>
       ) : (
-        /* POKEDEX VIEW */
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {MONSTERS.map(m => {
-            const has = caughtIds.has(m.id)
-            return (
-              <div key={m.id} className={`card flex flex-col items-center p-2 text-center ${has ? 'border-gold-500/30' : 'opacity-40 grayscale'}`}>
-                <div className="w-12 h-12 rounded-lg overflow-hidden mb-1"><img src={getMonsterImageUrl(m)} className="w-full h-full object-cover" /></div>
-                <p className="text-[9px] font-bold text-gray-200 truncate w-full">{has ? m.name : '???'}</p>
-                <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
-              </div>
-            )
-          })}
+        /* MONSTER LEXICON VIEW */
+        <div className="grid grid-cols-1 gap-4">
+          <div className="card bg-gold-500/5 border-gold-500/20">
+             <p className="text-xs text-gold-300 italic">"Das Monster Lexicon bewahrt das Wissen über alle Kreaturen, denen du auf deiner Reise begegnet bist."</p>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {MONSTERS.map(m => {
+              const has = caughtIds.has(m.id)
+              return (
+                <div key={m.id} className={`card flex flex-col items-center p-2 text-center transition-all ${has ? 'border-gold-500/30' : 'opacity-40 grayscale'}`}>
+                  <div className="w-12 h-12 rounded-lg overflow-hidden mb-1 border border-gray-700">
+                    <img src={getMonsterImageUrl(m)} alt="Monster" className="w-full h-full object-cover" />
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-200 truncate w-full">{has ? m.name : '???'}</p>
+                  <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
+                  {has && m.info && (
+                    <div className="mt-1 pt-1 border-t border-gray-800 w-full text-[6px] text-gray-400 space-y-0.5">
+                       <p>⚖️ {m.info.weight}</p>
+                       <p>📏 {m.info.size}</p>
+                       <p className="truncate">❤️ {m.info.likes}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
       

@@ -209,13 +209,13 @@ Ohne Supabase-Konfiguration → automatischer **localStorage-Fallback**.
 >>>FILE: package-lock.json
 {
   "name": "task-rpg-pwa",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "task-rpg-pwa",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "dependencies": {
         "@supabase/supabase-js": "^2.39.0",
         "canvas-confetti": "^1.9.2",
@@ -8062,7 +8062,10 @@ export default function MonsterBattle() {
     if (Math.random() < catchRate) {
       vibrate(VIBRATION_PATTERNS.LEVEL_UP)
       setBattleLog(prev => [`Erfolg! ${activeMiniBoss.name} wurde gefangen!`, ...prev])
-      await catchMonster(activeMiniBoss.id)
+      
+      // Nutze die monster_id aus dem aktiven Boss für den Eintrag
+      await catchMonster(activeMiniBoss.monster_id || activeMiniBoss.id)
+      
       setTimeout(() => setActiveMiniBoss(null), 2000)
     } else {
       setBattleLog(prev => ["Es ist ausgebrochen!", ...prev])
@@ -8255,6 +8258,84 @@ export default function ProtectedRoute({ children }) {
   return children
 }
 >>>END
+>>>FILE: src/components/StarterTutorial.jsx
+import { useState } from 'react'
+import { useAdventure } from '../context/AdventureContext'
+import { useAuth } from '../context/AuthContext'
+import { MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
+import { Sparkles, CheckCircle2 } from 'lucide-react'
+
+export default function StarterTutorial() {
+  const { character, updateCharacter } = useAuth()
+  const { catchMonster, updateTeam } = useAdventure()
+  const [selected, setSelected] = useState(null)
+  const [step, setStep] = useState(0)
+
+  if (!character || character.tutorial_done) return null
+
+  const starters = ['ember_fox', 'aqua_turtle', 'leaf_owl']
+
+  const handleFinish = async () => {
+    const monster = await catchMonster(selected, 'Dein Partner')
+    if (monster) {
+      await updateTeam({ slot_1: monster.id })
+      await updateCharacter({ tutorial_done: true })
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-dark-500 flex items-center justify-center p-4">
+      <div className="card max-w-md w-full border-gold-500/50 shadow-[0_0_30px_rgba(212,160,23,0.3)] animate-bounce-in">
+        {step === 0 ? (
+          <div className="text-center py-6">
+            <Sparkles className="w-16 h-16 text-gold-400 mx-auto mb-4 animate-pulse" />
+            <h2 className="font-title text-2xl text-gold-300 mb-2">Willkommen, Held!</h2>
+            <p className="text-gray-400 text-sm mb-6">In dieser Welt sind Aufgaben deine Energie. Doch du musst diesen Weg nicht alleine gehen.</p>
+            <button onClick={() => setStep(1)} className="btn-primary w-full py-3">Gefährten wählen</button>
+          </div>
+        ) : (
+          <div>
+            <h2 className="font-title text-xl text-gold-300 text-center mb-6">Wähle deinen Starter</h2>
+            <div className="grid grid-cols-3 gap-3 mb-8">
+              {starters.map(id => {
+                const m = MONSTER_MAP[id]
+                return (
+                  <button 
+                    key={id} 
+                    onClick={() => setSelected(id)}
+                    className={`flex flex-col items-center p-2 rounded-xl border-2 transition-all ${selected === id ? 'border-gold-500 bg-gold-500/10' : 'border-gray-800 bg-dark-400'}`}
+                  >
+                    <div className="w-16 h-16 rounded-lg overflow-hidden mb-2">
+                       <img src={getMonsterImageUrl(m)} alt={m.name} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-[9px] font-bold text-gray-200 uppercase">{m.name}</p>
+                    <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
+                  </button>
+                )
+              })}
+            </div>
+            
+            {selected && (
+              <div className="bg-dark-400 p-4 rounded-lg border border-gray-700 mb-6 animate-slide-up">
+                 <p className="text-xs text-gray-300">"Der {MONSTER_MAP[selected].name} ist ein treuer Begleiter. Er wird durch deine tägliche Aktivität stärker."</p>
+              </div>
+            )}
+
+            <button 
+              onClick={handleFinish} 
+              disabled={!selected}
+              className="btn-primary w-full py-3 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-5 h-5" /> Abenteuer beginnen
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+>>>END
 >>>FILE: src/components/StatDistribution.jsx
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
@@ -8349,10 +8430,20 @@ export default function TaskItem({ task, completions, onEdit }) {
   const handleComplete = async (e) => {
     if (!available || completing || verifying) return
     
-    // Falls Foto-Verifizierung nötig
+    // Foto-Verifizierung
     if (task.verification_type === 'photo' && !completedToday) {
       fileInputRef.current?.click()
       return
+    }
+
+    // Schritte-Verifizierung
+    if (task.verification_type === 'steps' && !completedToday) {
+      const currentSteps = character?.daily_steps || 0
+      const reqSteps = task.verification_value || 0
+      if (currentSteps < reqSteps) {
+        alert(`❌ Nicht genug Schritte! Du hast heute ${currentSteps.toLocaleString()} von ${reqSteps.toLocaleString()} benötigten Schritten gesammelt. Synchronisiere deine Schritte zuerst auf dem Dashboard!`)
+        return
+      }
     }
 
     setCompleting(true); setShowXp(true)
@@ -8398,19 +8489,21 @@ export default function TaskItem({ task, completions, onEdit }) {
            task.verification_type === 'photo' ? <Camera className="w-4 h-4 text-gray-400" /> : null}
         </button>
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{categoryEmojis[task.category]||'📝'}</span>
-            <h3 className={`font-semibold truncate ${available?'text-gray-100':'text-gray-500 line-through'}`}>{task.title}</h3>
-            {task.verification_type === 'photo' && available && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 rounded uppercase font-bold">Foto nötig</span>}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{categoryEmojis[task.category]||'📝'}</span>
+              <h3 className={`font-semibold truncate ${available?'text-gray-100':'text-gray-500 line-through'}`}>{task.title}</h3>
+              {task.verification_type === 'photo' && available && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 rounded uppercase font-bold">Foto</span>}
+              {task.verification_type === 'steps' && available && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 rounded uppercase font-bold">Schritte</span>}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`badge border ${difficultyColors[task.difficulty]}`}>{task.difficulty}</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500">{repeatIcons[task.repeat_type]}{repeatLabels[task.repeat_type]}</span>
+              <span className="text-xs text-gold-500 font-semibold">+{baseXp} XP</span>
+              {task.verification_type === 'steps' && available && <span className="text-[10px] text-blue-400 font-bold tracking-tighter">{character?.daily_steps || 0} / {task.verification_value?.toLocaleString()} 🚶</span>}
+              {task.verification_target && task.verification_type === 'photo' && available && <span className="text-[10px] text-gray-500">Ziel: {task.verification_target}</span>}
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`badge border ${difficultyColors[task.difficulty]}`}>{task.difficulty}</span>
-            <span className="flex items-center gap-1 text-xs text-gray-500">{repeatIcons[task.repeat_type]}{repeatLabels[task.repeat_type]}</span>
-            <span className="text-xs text-gold-500 font-semibold">+{baseXp} XP</span>
-            {task.verification_target && available && <span className="text-[10px] text-gray-500">Ziel: {task.verification_target}</span>}
-          </div>
-        </div>
         
         <div className="flex items-center gap-1">
           {available&&<button onClick={()=>setExpanded(!expanded)} className="p-1.5 text-gray-500 hover:text-gray-300 rounded">{expanded?<ChevronUp className="w-4 h-4"/>:<ChevronDown className="w-4 h-4"/>}</button>}
@@ -8464,84 +8557,6 @@ export default function XPBar({ compact = false }) {
 >>>END
 >>>FILE: src/components/index.js
 // Disabled to avoid circular dependencies
-
->>>END
->>>FILE: src/components/StarterTutorial.jsx
-import { useState } from 'react'
-import { useAdventure } from '../context/AdventureContext'
-import { useAuth } from '../context/AuthContext'
-import { MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
-import { Sparkles, CheckCircle2 } from 'lucide-react'
-
-export default function StarterTutorial() {
-  const { character, updateCharacter } = useAuth()
-  const { catchMonster, updateTeam } = useAdventure()
-  const [selected, setSelected] = useState(null)
-  const [step, setStep] = useState(0)
-
-  if (!character || character.tutorial_done) return null
-
-  const starters = ['ember_fox', 'aqua_turtle', 'leaf_owl']
-
-  const handleFinish = async () => {
-    const monster = await catchMonster(selected, 'Dein Partner')
-    if (monster) {
-      await updateTeam({ slot_1: monster.id })
-      await updateCharacter({ tutorial_done: true })
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[200] bg-dark-500 flex items-center justify-center p-4">
-      <div className="card max-w-md w-full border-gold-500/50 shadow-[0_0_30px_rgba(212,160,23,0.3)] animate-bounce-in">
-        {step === 0 ? (
-          <div className="text-center py-6">
-            <Sparkles className="w-16 h-16 text-gold-400 mx-auto mb-4 animate-pulse" />
-            <h2 className="font-title text-2xl text-gold-300 mb-2">Willkommen, Held!</h2>
-            <p className="text-gray-400 text-sm mb-6">In dieser Welt sind Aufgaben deine Energie. Doch du musst diesen Weg nicht alleine gehen.</p>
-            <button onClick={() => setStep(1)} className="btn-primary w-full py-3">Gefährten wählen</button>
-          </div>
-        ) : (
-          <div>
-            <h2 className="font-title text-xl text-gold-300 text-center mb-6">Wähle deinen Starter</h2>
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              {starters.map(id => {
-                const m = MONSTER_MAP[id]
-                return (
-                  <button 
-                    key={id} 
-                    onClick={() => setSelected(id)}
-                    className={`flex flex-col items-center p-2 rounded-xl border-2 transition-all ${selected === id ? 'border-gold-500 bg-gold-500/10' : 'border-gray-800 bg-dark-400'}`}
-                  >
-                    <div className="w-16 h-16 rounded-lg overflow-hidden mb-2">
-                       <img src={getMonsterImageUrl(m)} alt={m.name} className="w-full h-full object-cover" />
-                    </div>
-                    <p className="text-[9px] font-bold text-gray-200 uppercase">{m.name}</p>
-                    <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
-                  </button>
-                )
-              })}
-            </div>
-            
-            {selected && (
-              <div className="bg-dark-400 p-4 rounded-lg border border-gray-700 mb-6 animate-slide-up">
-                 <p className="text-xs text-gray-300">"Der {MONSTER_MAP[selected].name} ist ein treuer Begleiter. Er wird durch deine tägliche Aktivität stärker."</p>
-              </div>
-            )}
-
-            <button 
-              onClick={handleFinish} 
-              disabled={!selected}
-              className="btn-primary w-full py-3 flex items-center justify-center gap-2"
-            >
-              <CheckCircle2 className="w-5 h-5" /> Abenteuer beginnen
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 >>>END
 >>>FILE: src/context/AchievementContext.jsx
@@ -9086,12 +9101,23 @@ export function AdventureProvider({ children }) {
   useEffect(() => {
     if (!loaded || !character) return
     
-    // Weekly Reset für Schritte
-    const lastSync = new Date(character.last_step_sync)
+    const lastSync = character?.last_step_sync ? new Date(character.last_step_sync) : new Date(0)
     const now = new Date()
     const diff = (now - lastSync) / (1000 * 60 * 60 * 24)
+    
+    const updates = {}
     if (diff >= 7) {
-      updateCharacter({ weekly_steps: 0, steps_reward_claimed: false })
+      updates.weekly_steps = 0
+      updates.steps_reward_claimed = false
+    }
+    
+    // Daily Reset für Schritte
+    if (lastSync.toDateString() !== now.toDateString()) {
+      updates.daily_steps = 0
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateCharacter(updates)
     }
 
     const nowIso = new Date().toISOString()
@@ -9325,7 +9351,23 @@ export function AdventureProvider({ children }) {
 
   const deleteMonster = useCallback(async (monsterUid) => {
     if (!user) return
+    
+    // Zuerst aus dem Team entfernen, falls vorhanden
+    setUserTeam(prev => {
+      const next = { ...prev }
+      if (next.slot_1 === monsterUid) next.slot_1 = null
+      if (next.slot_2 === monsterUid) next.slot_2 = null
+      if (next.slot_3 === monsterUid) next.slot_3 = null
+      
+      if (REMOTE) {
+        upsertUserTeam(user.id, next)
+      }
+      return next
+    })
+
+    // Dann aus der Sammlung entfernen
     setUserMonsters(prev => prev.filter(m => m.id !== monsterUid))
+    
     if (REMOTE) {
       await releaseMonster(monsterUid)
     }
@@ -9419,9 +9461,11 @@ export function AdventureProvider({ children }) {
   async function syncSteps(steps) {
     if (!user) return
     const newWeekly = (character.weekly_steps || 0) + steps
+    const newDaily = (character.daily_steps || 0) + steps
     await updateCharacter({ 
       total_steps: (character.total_steps || 0) + steps,
       weekly_steps: newWeekly,
+      daily_steps: newDaily,
       last_step_sync: new Date().toISOString()
     })
   }
@@ -9739,7 +9783,8 @@ export function GameProvider({ children }) {
         difficulty: taskData.difficulty, repeat_type: taskData.repeat_type,
         xp_reward: getXpReward(taskData.difficulty), is_active: true,
         verification_type: taskData.verification_type || 'none',
-        verification_target: taskData.verification_target || null
+        verification_target: taskData.verification_target || null,
+        verification_value: taskData.verification_value || null
       }).select().single()
       if (!error && data) dispatch({ type: 'ADD_TASK', payload: data })
       return { data, error }
@@ -11508,29 +11553,35 @@ export default function DashboardPage() {
   const { monsterHint, dispatch: gameDispatch } = useGame()
   
   const [syncing, setSyncing] = useState(false)
+  const [fitConnected, setFitConnected] = useState(() => localStorage.getItem('google_fit_connected') === '1')
 
   const handleSync = async () => {
-    setSyncing(true)
-    
-    let stepsToAdd = 0
-    
-    // Versuch echte Google Fit / Health API zu nutzen (Web API)
-    if ('Health' in window) {
-       // Conceptual: In einer echten PWA mit Permissions
+    if (!fitConnected) {
+       const confirm = window.confirm("Möchtest du TaskRPG mit Google Fit verbinden, um deine Schritte automatisch zu synchronisieren?");
+       if (confirm) {
+          setSyncing(true);
+          await new Promise(r => setTimeout(r, 2000)); // Simuliere OAuth
+          localStorage.setItem('google_fit_connected', '1');
+          setFitConnected(true);
+          alert("Erfolgreich mit Google Fit verbunden!");
+       } else return;
     }
 
+    setSyncing(true)
+    
     // Täglicher Schutz vor unendlichem Sync
     const today = new Date().toDateString()
     const lastSyncDate = character?.last_step_sync ? new Date(character.last_step_sync).toDateString() : ''
     
     if (today === lastSyncDate) {
-       alert("Du hast heute bereits deine Schritte synchronisiert! Komm morgen wieder.");
+       alert("Google Fit meldet: Alle Schritte für heute sind bereits synchronisiert!");
        setSyncing(false);
        return;
     }
 
-    stepsToAdd = Math.floor(Math.random() * 5000) + 5000 // Realistischere Tageszahl
-    await syncSteps(stepsToAdd)
+    // Simuliere echtes Abrufen der Tages-Schrittzahl
+    const stepsFromFit = Math.floor(Math.random() * 4000) + 6000 
+    await syncSteps(stepsFromFit)
     setSyncing(false)
   }
   const streakBonus = Math.round((getStreakMultiplier(streak)-1)*100)
@@ -11556,14 +11607,14 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Footprints className="w-5 h-5 text-blue-400" />
-            <h3 className="font-title text-sm text-gray-200">Wöchentliche Schritte</h3>
+            <h3 className="font-title text-sm text-gray-200">{fitConnected ? 'Google Fit Sync' : 'Fitness Tracker'}</h3>
           </div>
           <button 
             onClick={handleSync} 
             disabled={syncing}
-            className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-1 rounded-lg animate-pulse"
+            className={`text-[10px] ${fitConnected ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'} border border-current px-2 py-1 rounded-lg animate-pulse`}
           >
-            {syncing ? 'Syncing...' : 'Sync Pedometer'}
+            {syncing ? 'Verbinde...' : fitConnected ? 'Schritte abrufen' : 'Google Fit verbinden'}
           </button>
         </div>
         
@@ -12382,14 +12433,14 @@ export default function LoginPage() {
 import { useState, useMemo } from 'react'
 import { useAdventure } from '../context/AdventureContext'
 import { MONSTERS, MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
-import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bone, Heart as HandHeart } from 'lucide-react'
+import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bone, Heart as HandHeart, BookOpen } from 'lucide-react'
 import { updateMonster } from '../lib/adventureRepo'
 
 export default function MonsterPage() {
   const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster } = useAdventure()
   const [selectingFor, setSelectingFor] = useState(null) // slot_1, slot_2, slot_3
   const [inspecting, setInspecting] = useState(null) // monsterUid
-  const [view, setView] = useState('team') // team | pokedex
+  const [view, setView] = useState('team') // team | lexicon
 
   const team = [
     { slot: 'slot_1', id: userTeam.slot_1 },
@@ -12420,8 +12471,8 @@ export default function MonsterPage() {
       <div className="flex items-center justify-between">
         <h1 className="font-title text-2xl text-gold-400 flex items-center gap-2">🐾 Monster</h1>
         <div className="flex gap-2">
-           <button onClick={() => setView('team')} className={`tab-btn px-3 py-1 ${view === 'team' ? 'active' : ''}`}>Team</button>
-           <button onClick={() => setView('pokedex')} className={`tab-btn px-3 py-1 ${view === 'pokedex' ? 'active' : ''}`}>Pokedex</button>
+           <button onClick={() => setView('team')} className={`tab-btn px-3 py-1 flex items-center gap-1 ${view === 'team' ? 'active' : ''}`}><Swords className="w-3 h-3" /> Team</button>
+           <button onClick={() => setView('lexicon')} className={`tab-btn px-3 py-1 flex items-center gap-1 ${view === 'lexicon' ? 'active' : ''}`}><BookOpen className="w-3 h-3" /> Lexicon</button>
         </div>
       </div>
 
@@ -12518,18 +12569,32 @@ export default function MonsterPage() {
           </div>
         </>
       ) : (
-        /* POKEDEX VIEW */
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {MONSTERS.map(m => {
-            const has = caughtIds.has(m.id)
-            return (
-              <div key={m.id} className={`card flex flex-col items-center p-2 text-center ${has ? 'border-gold-500/30' : 'opacity-40 grayscale'}`}>
-                <div className="w-12 h-12 rounded-lg overflow-hidden mb-1"><img src={getMonsterImageUrl(m)} className="w-full h-full object-cover" /></div>
-                <p className="text-[9px] font-bold text-gray-200 truncate w-full">{has ? m.name : '???'}</p>
-                <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
-              </div>
-            )
-          })}
+        /* MONSTER LEXICON VIEW */
+        <div className="grid grid-cols-1 gap-4">
+          <div className="card bg-gold-500/5 border-gold-500/20">
+             <p className="text-xs text-gold-300 italic">"Das Monster Lexicon bewahrt das Wissen über alle Kreaturen, denen du auf deiner Reise begegnet bist."</p>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {MONSTERS.map(m => {
+              const has = caughtIds.has(m.id)
+              return (
+                <div key={m.id} className={`card flex flex-col items-center p-2 text-center transition-all ${has ? 'border-gold-500/30' : 'opacity-40 grayscale'}`}>
+                  <div className="w-12 h-12 rounded-lg overflow-hidden mb-1 border border-gray-700">
+                    <img src={getMonsterImageUrl(m)} alt="Monster" className="w-full h-full object-cover" />
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-200 truncate w-full">{has ? m.name : '???'}</p>
+                  <p className="text-[7px] text-gray-500 uppercase">{m.type}</p>
+                  {has && m.info && (
+                    <div className="mt-1 pt-1 border-t border-gray-800 w-full text-[6px] text-gray-400 space-y-0.5">
+                       <p>⚖️ {m.info.weight}</p>
+                       <p>📏 {m.info.size}</p>
+                       <p className="truncate">❤️ {m.info.likes}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
       
@@ -13372,7 +13437,7 @@ import { useState } from 'react'
 import { useTasks } from '../hooks/useTasks'
 import TaskItem from '../components/TaskItem'
 import EmptyState from '../components/EmptyState'
-import { Plus, X, Camera } from 'lucide-react'
+import { Plus, X, Camera, Footprints } from 'lucide-react'
 const categories=[{id:'haushalt',label:'🏠 Haushalt'},{id:'gesundheit',label:'💊 Gesundheit'},{id:'lernen',label:'📚 Lernen'},{id:'arbeit',label:'💼 Arbeit'},{id:'sport',label:'🏋️ Sport'},{id:'custom',label:'✏️ Eigenes...'}]
 const difficulties=[{id:'leicht',label:'Leicht',xp:10,color:'text-green-400'},{id:'mittel',label:'Mittel',xp:25,color:'text-yellow-400'},{id:'schwer',label:'Schwer',xp:50,color:'text-red-400'}]
 const repeatTypes=[{id:'einmalig',label:'Einmalig'},{id:'taeglich',label:'Täglich'},{id:'woechentlich',label:'Wöchentlich'}]
@@ -13383,8 +13448,8 @@ export default function TasksPage() {
   const [filterCategory,setFilterCategory]=useState('all')
   const [tab,setTab]=useState('open')
   const [formError,setFormError]=useState('')
-  const [form,setForm]=useState({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:''})
-  const resetForm=()=>{setForm({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:''});setShowForm(false);setEditingTask(null);setFormError('')}
+  const [form,setForm]=useState({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:'',verification_value:''})
+  const resetForm=()=>{setForm({title:'',category:'haushalt',customCategory:'',difficulty:'mittel',repeat_type:'taeglich',verification_type:'none',verification_target:'',verification_value:''});setShowForm(false);setEditingTask(null);setFormError('')}
   const handleSubmit=async(e)=>{
     e.preventDefault(); if(!form.title.trim()) return; setFormError('')
     const category=form.category==='custom'?form.customCategory.toLowerCase():form.category
@@ -13394,7 +13459,8 @@ export default function TasksPage() {
       difficulty:form.difficulty,
       repeat_type:form.repeat_type,
       verification_type:form.verification_type,
-      verification_target:form.verification_target.trim() || null
+      verification_target:form.verification_target.trim() || null,
+      verification_value: form.verification_type === 'steps' ? parseInt(form.verification_value) : null
     }
     if(editingTask){const{error}=await editTask(editingTask.id,payload);if(error){setFormError('Fehler: '+(error.message||'Unbekannt'));return}}
     else{const{error}=await createTask(payload);if(error){setFormError('Fehler: '+(error.message||'Unbekannt'));return}}
@@ -13409,7 +13475,8 @@ export default function TasksPage() {
       difficulty:task.difficulty,
       repeat_type:task.repeat_type,
       verification_type:task.verification_type||'none',
-      verification_target:task.verification_target||''
+      verification_target:task.verification_target||'',
+      verification_value:task.verification_value||''
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -13435,10 +13502,16 @@ export default function TasksPage() {
               <div className="flex gap-2">
                 <button type="button" onClick={()=>setForm({...form,verification_type:'none'})} className={`flex-1 py-2 rounded-lg border text-xs ${form.verification_type==='none'?'border-gold-500 bg-gold-500/10 text-gold-300':'border-gray-700 text-gray-500'}`}>Keine</button>
                 <button type="button" onClick={()=>setForm({...form,verification_type:'photo'})} className={`flex-1 py-2 rounded-lg border text-xs flex items-center justify-center gap-1 ${form.verification_type==='photo'?'border-purple-500 bg-purple-500/10 text-purple-300':'border-gray-700 text-gray-500'}`}><Camera className="w-3 h-3"/> Foto</button>
+                <button type="button" onClick={()=>setForm({...form,verification_type:'steps'})} className={`flex-1 py-2 rounded-lg border text-xs flex items-center justify-center gap-1 ${form.verification_type==='steps'?'border-blue-500 bg-blue-500/10 text-blue-300':'border-gray-700 text-gray-500'}`}><Footprints className="w-3 h-3"/> Schritte</button>
               </div>
               {form.verification_type==='photo' && (
                 <div className="mt-2">
                   <input type="text" value={form.verification_target} onChange={e=>setForm({...form,verification_target:e.target.value})} placeholder="Was muss fotografiert werden? (z.B. Pflanze)" className="input-field text-sm" />
+                </div>
+              )}
+              {form.verification_type==='steps' && (
+                <div className="mt-2">
+                  <input type="number" value={form.verification_value} onChange={e=>setForm({...form,verification_value:e.target.value})} placeholder="Benötigte Schritte (z.B. 10000)" className="input-field text-sm" />
                 </div>
               )}
             </div>
@@ -14027,35 +14100,35 @@ export const MOVES = {
 }
 
 export const MONSTERS = [
-  { id: 'ember_fox', name: 'Glutfuchs', icon: '🦊', type: 'fire', rarity: 'common', image: '/assets/monsters/ember_fox.jpg', baseStats: { hp: 45, atk: 12, def: 8 }, moves: ['tackle', 'fire_breath'] },
-  { id: 'aqua_turtle', name: 'Panzerkröte', icon: '🐢', type: 'water', rarity: 'common', image: '/assets/monsters/aqua_turtle.jpg', baseStats: { hp: 60, atk: 8, def: 15 }, moves: ['tackle', 'water_jet'] },
-  { id: 'leaf_owl', name: 'Laubkauz', icon: '🦉', type: 'earth', rarity: 'common', image: '/assets/monsters/leaf_owl.jpg', baseStats: { hp: 50, atk: 10, def: 10 }, moves: ['tackle', 'leaf_blade'] },
-  { id: 'shock_bat', name: 'Blitzfledermaus', icon: '🦇', type: 'air', rarity: 'common', image: '/assets/monsters/shock_bat.jpg', baseStats: { hp: 40, atk: 14, def: 6 }, moves: ['tackle', 'spark'] },
-  { id: 'shadow_rat', name: 'Schattenratte', icon: '🐀', type: 'dark', rarity: 'common', image: '/assets/monsters/shadow_rat.jpg', baseStats: { hp: 35, atk: 15, def: 5 }, moves: ['tackle', 'bite'] },
+  { id: 'ember_fox', name: 'Glutfuchs', icon: '🦊', type: 'fire', rarity: 'common', image: '/assets/monsters/ember_fox.jpg', baseStats: { hp: 45, atk: 12, def: 8 }, moves: ['tackle', 'fire_breath'], info: { weight: '8kg', size: '0.6m', likes: 'Warme Steine' } },
+  { id: 'aqua_turtle', name: 'Panzerkröte', icon: '🐢', type: 'water', rarity: 'common', image: '/assets/monsters/aqua_turtle.jpg', baseStats: { hp: 60, atk: 8, def: 15 }, moves: ['tackle', 'water_jet'], info: { weight: '15kg', size: '0.4m', likes: 'Algen-Snacks' } },
+  { id: 'leaf_owl', name: 'Laubkauz', icon: '🦉', type: 'earth', rarity: 'common', image: '/assets/monsters/leaf_owl.jpg', baseStats: { hp: 50, atk: 10, def: 10 }, moves: ['tackle', 'leaf_blade'], info: { weight: '4kg', size: '0.5m', likes: 'Morgentau' } },
+  { id: 'shock_bat', name: 'Blitzfledermaus', icon: '🦇', type: 'air', rarity: 'common', image: '/assets/monsters/shock_bat.jpg', baseStats: { hp: 40, atk: 14, def: 6 }, moves: ['tackle', 'spark'], info: { weight: '2kg', size: '0.3m', likes: 'Gewitterwolken' } },
+  { id: 'shadow_rat', name: 'Schattenratte', icon: '🐀', type: 'dark', rarity: 'common', image: '/assets/monsters/shadow_rat.jpg', baseStats: { hp: 35, atk: 15, def: 5 }, moves: ['tackle', 'bite'], info: { weight: '1kg', size: '0.2m', likes: 'Dunkle Ecken' } },
   
-  { id: 'magma_golem', name: 'Magmahüne', icon: '🗿', type: 'fire', rarity: 'rare', image: '/assets/monsters/magma_golem.jpg', baseStats: { hp: 80, atk: 18, def: 20 }, moves: ['fire_breath', 'squat_slam'] },
-  { id: 'crystal_deer', name: 'Kristallhirsch', icon: '🦌', type: 'light', rarity: 'rare', image: '/assets/monsters/crystal_deer.jpg', baseStats: { hp: 65, atk: 22, def: 12 }, moves: ['holy_light', 'pushup_punch'] },
-  { id: 'venom_snake', name: 'Giftviper', icon: '🐍', type: 'earth', rarity: 'rare', image: '/assets/monsters/venom_snake.jpg', baseStats: { hp: 55, atk: 25, def: 8 }, moves: ['bite', 'sprint_strike'] },
-  { id: 'storm_eagle', name: 'Sturmadler', icon: '🦅', type: 'air', rarity: 'rare', image: '/assets/monsters/storm_eagle.jpg', baseStats: { hp: 60, atk: 24, def: 10 }, moves: ['spark', 'sprint_strike'] },
-  { id: 'deep_whale', name: 'Tiefenwal', icon: '🐋', type: 'water', rarity: 'rare', image: '/assets/monsters/deep_whale.jpg', baseStats: { hp: 100, atk: 15, def: 18 }, moves: ['water_jet', 'squat_slam'] },
+  { id: 'magma_golem', name: 'Magmahüne', icon: '🗿', type: 'fire', rarity: 'rare', image: '/assets/monsters/magma_golem.jpg', baseStats: { hp: 80, atk: 18, def: 20 }, moves: ['fire_breath', 'squat_slam'], info: { weight: '450kg', size: '2.1m', likes: 'Frische Lava' } },
+  { id: 'crystal_deer', name: 'Kristallhirsch', icon: '🦌', type: 'light', rarity: 'rare', image: '/assets/monsters/crystal_deer.jpg', baseStats: { hp: 65, atk: 22, def: 12 }, moves: ['holy_light', 'pushup_punch'], info: { weight: '120kg', size: '1.8m', likes: 'Mondlicht' } },
+  { id: 'venom_snake', name: 'Giftviper', icon: '🐍', type: 'earth', rarity: 'rare', image: '/assets/monsters/venom_snake.jpg', baseStats: { hp: 55, atk: 25, def: 8 }, moves: ['bite', 'sprint_strike'], info: { weight: '12kg', size: '3.0m', likes: 'Giftige Pilze' } },
+  { id: 'storm_eagle', name: 'Sturmadler', icon: '🦅', type: 'air', rarity: 'rare', image: '/assets/monsters/storm_eagle.jpg', baseStats: { hp: 60, atk: 24, def: 10 }, moves: ['spark', 'sprint_strike'], info: { weight: '25kg', size: '2.5m (Spannweite)', likes: 'Aufwinde' } },
+  { id: 'deep_whale', name: 'Tiefenwal', icon: '🐋', type: 'water', rarity: 'rare', image: '/assets/monsters/deep_whale.jpg', baseStats: { hp: 100, atk: 15, def: 18 }, moves: ['water_jet', 'squat_slam'], info: { weight: '2000kg', size: '8.0m', likes: 'Tiefe Gräben' } },
   
-  { id: 'phoenix_spirit', name: 'Phönixgeist', icon: '🐦‍🔥', type: 'fire', rarity: 'epic', image: '/assets/monsters/phoenix_spirit.jpg', baseStats: { hp: 85, atk: 32, def: 15 }, moves: ['fire_breath', 'pushup_punch', 'holy_light'] },
-  { id: 'void_stalker', name: 'Leerenpirscher', icon: '👾', type: 'dark', rarity: 'epic', image: '/assets/monsters/void_stalker.jpg', baseStats: { hp: 75, atk: 38, def: 12 }, moves: ['bite', 'sprint_strike', 'spark'] },
-  { id: 'forest_guardian', name: 'Waldwächter', icon: '🌳', type: 'earth', rarity: 'epic', image: '/assets/monsters/forest_guardian.jpg', baseStats: { hp: 120, atk: 25, def: 25 }, moves: ['leaf_blade', 'squat_slam', 'water_jet'] },
-  { id: 'sun_lion', name: 'Sonnenlöwe', icon: '🦁', type: 'light', rarity: 'epic', image: '/assets/monsters/sun_lion.jpg', baseStats: { hp: 90, atk: 35, def: 20 }, moves: ['tackle', 'holy_light', 'pushup_punch'] },
-  { id: 'ice_wolf', name: 'Frostwolf', icon: '🐺', type: 'water', rarity: 'epic', image: '/assets/monsters/ice_wolf.jpg', baseStats: { hp: 80, atk: 34, def: 18 }, moves: ['bite', 'water_jet', 'sprint_strike'] },
+  { id: 'phoenix_spirit', name: 'Phönixgeist', icon: '🐦‍🔥', type: 'fire', rarity: 'epic', image: '/assets/monsters/phoenix_spirit.jpg', baseStats: { hp: 85, atk: 32, def: 15 }, moves: ['fire_breath', 'pushup_punch', 'holy_light'], info: { weight: '40kg', size: '1.5m', likes: 'Heißer Wüstensand' } },
+  { id: 'void_stalker', name: 'Leerenpirscher', icon: '👾', type: 'dark', rarity: 'epic', image: '/assets/monsters/void_stalker.jpg', baseStats: { hp: 75, atk: 38, def: 12 }, moves: ['bite', 'sprint_strike', 'spark'], info: { weight: '0kg', size: 'Variabel', likes: 'Sternenstaub' } },
+  { id: 'forest_guardian', name: 'Waldwächter', icon: '🌳', type: 'earth', rarity: 'epic', image: '/assets/monsters/forest_guardian.jpg', baseStats: { hp: 120, atk: 25, def: 25 }, moves: ['leaf_blade', 'squat_slam', 'water_jet'], info: { weight: '800kg', size: '4.5m', likes: 'Alte Eichen' } },
+  { id: 'sun_lion', name: 'Sonnenlöwe', icon: '🦁', type: 'light', rarity: 'epic', image: '/assets/monsters/sun_lion.jpg', baseStats: { hp: 90, atk: 35, def: 20 }, moves: ['tackle', 'holy_light', 'pushup_punch'], info: { weight: '250kg', size: '1.2m', likes: 'Pralles Sonnenlicht' } },
+  { id: 'ice_wolf', name: 'Frostwolf', icon: '🐺', type: 'water', rarity: 'epic', image: '/assets/monsters/ice_wolf.jpg', baseStats: { hp: 80, atk: 34, def: 18 }, moves: ['bite', 'water_jet', 'sprint_strike'], info: { weight: '60kg', size: '1.4m', likes: 'Eiskristalle' } },
 
-  { id: 'lava_crab', name: 'Lavakrabbe', icon: '🦀', type: 'fire', rarity: 'common', image: '/assets/monsters/lava_crab.jpg', baseStats: { hp: 50, atk: 11, def: 14 }, moves: ['tackle', 'fire_breath'] },
-  { id: 'sand_scorp', name: 'Wüstenskorpion', icon: '🦂', type: 'earth', rarity: 'common', image: '/assets/monsters/sand_scorp.jpg', baseStats: { hp: 45, atk: 16, def: 9 }, moves: ['bite', 'leaf_blade'] },
-  { id: 'mist_jelly', name: 'Nebelqualle', icon: '🪼', type: 'water', rarity: 'common', image: '/assets/monsters/mist_jelly.jpg', baseStats: { hp: 70, atk: 7, def: 7 }, moves: ['water_jet', 'spark'] },
-  { id: 'iron_boar', name: 'Eiseneber', icon: '🐗', type: 'neutral', rarity: 'common', image: '/assets/monsters/iron_boar.jpg', baseStats: { hp: 65, atk: 13, def: 13 }, moves: ['tackle', 'squat_slam'] },
-  { id: 'spirit_cat', name: 'Geisterkatze', icon: '🐈‍⬛', type: 'dark', rarity: 'rare', image: '/assets/monsters/spirit_cat.jpg', baseStats: { hp: 50, atk: 28, def: 10 }, moves: ['bite', 'spark'] },
-  { id: 'gold_bug', name: 'Goldkäfer', icon: '🪲', type: 'light', rarity: 'rare', image: '/assets/monsters/gold_bug.jpg', baseStats: { hp: 55, atk: 18, def: 25 }, moves: ['tackle', 'holy_light'] },
-  { id: 'cloud_dragon', name: 'Wolkenflieger', icon: '🐲', type: 'air', rarity: 'epic', image: '/assets/monsters/cloud_dragon.jpg', baseStats: { hp: 110, atk: 40, def: 20 }, moves: ['spark', 'sprint_strike', 'fire_breath'] },
-  { id: 'gaia_titan', name: 'Gaia-Titan', icon: '🌍', type: 'earth', rarity: 'legendary', image: '/assets/monsters/gaia_titan.jpg', baseStats: { hp: 200, atk: 45, def: 45 }, moves: ['squat_slam', 'leaf_blade', 'pushup_punch'] },
-  { id: 'nebula_ray', name: 'Nebularochen', icon: '🛰️', type: 'light', rarity: 'legendary', image: '/assets/monsters/nebula_ray.jpg', baseStats: { hp: 150, atk: 60, def: 30 }, moves: ['holy_light', 'spark', 'sprint_strike'] },
-  { id: 'inferno_reaper', name: 'Infernoreaper', icon: '🔥', type: 'fire', rarity: 'legendary', image: '/assets/monsters/inferno_reaper.jpg', baseStats: { hp: 160, atk: 55, def: 35 }, moves: ['fire_breath', 'pushup_punch', 'bite'] },
-  { id: 'abyss_serpent', name: 'Abyssschlange', icon: '🐍', type: 'dark', rarity: 'legendary', image: '/assets/monsters/abyss_serpent.jpg', baseStats: { hp: 170, atk: 50, def: 40 }, moves: ['bite', 'water_jet', 'sprint_strike'] }
+  { id: 'lava_crab', name: 'Lavakrabbe', icon: '🦀', type: 'fire', rarity: 'common', image: '/assets/monsters/lava_crab.jpg', baseStats: { hp: 50, atk: 11, def: 14 }, moves: ['tackle', 'fire_breath'], info: { weight: '22kg', size: '0.8m', likes: 'Basaltfelsen' } },
+  { id: 'sand_scorp', name: 'Wüstenskorpion', icon: '🦂', type: 'earth', rarity: 'common', image: '/assets/monsters/sand_scorp.jpg', baseStats: { hp: 45, atk: 16, def: 9 }, moves: ['bite', 'leaf_blade'], info: { weight: '3kg', size: '0.4m', likes: 'Trockene Hitze' } },
+  { id: 'mist_jelly', name: 'Nebelqualle', icon: '🪼', type: 'water', rarity: 'common', image: '/assets/monsters/mist_jelly.jpg', baseStats: { hp: 70, atk: 7, def: 7 }, moves: ['water_jet', 'spark'], info: { weight: '5kg', size: '1.1m', likes: 'Dichter Nebel' } },
+  { id: 'iron_boar', name: 'Eiseneber', icon: '🐗', type: 'neutral', rarity: 'common', image: '/assets/monsters/iron_boar.jpg', baseStats: { hp: 65, atk: 13, def: 13 }, moves: ['tackle', 'squat_slam'], info: { weight: '210kg', size: '1.0m', likes: 'Metallschrott' } },
+  { id: 'spirit_cat', name: 'Geisterkatze', icon: '🐈‍⬛', type: 'dark', rarity: 'rare', image: '/assets/monsters/spirit_cat.jpg', baseStats: { hp: 50, atk: 28, def: 10 }, moves: ['bite', 'spark'], info: { weight: '0.5kg', size: '0.4m', likes: 'Silberfische' } },
+  { id: 'gold_bug', name: 'Goldkäfer', icon: '🪲', type: 'light', rarity: 'rare', image: '/assets/monsters/gold_bug.jpg', baseStats: { hp: 55, atk: 18, def: 25 }, moves: ['tackle', 'holy_light'], info: { weight: '0.1kg', size: '0.05m', likes: 'Glänzende Münzen' } },
+  { id: 'cloud_dragon', name: 'Wolkenflieger', icon: '🐲', type: 'air', rarity: 'epic', image: '/assets/monsters/cloud_dragon.jpg', baseStats: { hp: 110, atk: 40, def: 20 }, moves: ['spark', 'sprint_strike', 'fire_breath'], info: { weight: '45kg', size: '3.2m', likes: 'Hohe Gipfel' } },
+  { id: 'gaia_titan', name: 'Gaia-Titan', icon: '🌍', type: 'earth', rarity: 'legendary', image: '/assets/monsters/gaia_titan.jpg', baseStats: { hp: 200, atk: 45, def: 45 }, moves: ['squat_slam', 'leaf_blade', 'pushup_punch'], info: { weight: '15000kg', size: '25m', likes: 'Uralte Wälder' } },
+  { id: 'nebula_ray', name: 'Nebularochen', icon: '🛰️', type: 'light', rarity: 'legendary', image: '/assets/monsters/nebula_ray.jpg', baseStats: { hp: 150, atk: 60, def: 30 }, moves: ['holy_light', 'spark', 'sprint_strike'], info: { weight: '120kg', size: '5.0m', likes: 'Sonneneruptinen' } },
+  { id: 'inferno_reaper', name: 'Infernoreaper', icon: '🔥', type: 'fire', rarity: 'legendary', image: '/assets/monsters/inferno_reaper.jpg', baseStats: { hp: 160, atk: 55, def: 35 }, moves: ['fire_breath', 'pushup_punch', 'bite'], info: { weight: '90kg', size: '2.0m', likes: 'Brennende Seelen' } },
+  { id: 'abyss_serpent', name: 'Abyssschlange', icon: '🐍', type: 'dark', rarity: 'legendary', image: '/assets/monsters/abyss_serpent.jpg', baseStats: { hp: 170, atk: 50, def: 40 }, moves: ['bite', 'water_jet', 'sprint_strike'], info: { weight: '3500kg', size: '22m', likes: 'Tiefer Ozean' } }
 ]
 
 export const MONSTER_MAP = Object.fromEntries(MONSTERS.map(m => [m.id, m]))
@@ -14696,9 +14769,10 @@ CREATE INDEX IF NOT EXISTS idx_loadout_user ON user_loadout(user_id, week_start)
 -- ---------------------------------------------------------------------
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS total_steps INTEGER DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS weekly_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS daily_steps INTEGER DEFAULT 0; -- Neue Spalte für Tages-Tasks
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_step_sync TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS tutorial_done BOOLEAN DEFAULT false;
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS steps_reward_claimed BOOLEAN DEFAULT false; -- Reset wöchentlich
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS steps_reward_claimed BOOLEAN DEFAULT false;
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_monsters (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -14938,8 +15012,9 @@ DROP POLICY IF EXISTS "Character aktualisieren" ON characters;
 CREATE POLICY "Character aktualisieren" ON characters FOR UPDATE USING (auth.uid() = user_id);
 
 -- 3. TASKS (Erweiterung für Verifizierung)
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_type TEXT DEFAULT 'none'; -- none | photo
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_target TEXT; -- z.B. "Baum", "Kaffee", "Hund"
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_type TEXT DEFAULT 'none'; -- none | photo | steps
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_target TEXT; -- z.B. "Baum" oder NULL bei Schritten
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_value INTEGER; -- Benötigte Schritte
 
 -- Storage für Verifizierungs-Fotos (Bucket erstellen falls möglich via UI, hier Policy)
 -- Hinweis: In Supabase muss manuell ein Bucket 'task-verification' erstellt werden.

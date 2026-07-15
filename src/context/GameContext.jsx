@@ -164,7 +164,8 @@ export function GameProvider({ children }) {
         difficulty: taskData.difficulty, repeat_type: taskData.repeat_type,
         xp_reward: getXpReward(taskData.difficulty), is_active: true,
         verification_type: taskData.verification_type || 'none',
-        verification_target: taskData.verification_target || null
+        verification_target: taskData.verification_target || null,
+        verification_value: taskData.verification_value || null
       }).select().single()
       if (!error && data) dispatch({ type: 'ADD_TASK', payload: data })
       return { data, error }

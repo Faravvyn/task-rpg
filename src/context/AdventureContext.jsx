@@ -332,12 +332,23 @@ export function AdventureProvider({ children }) {
   useEffect(() => {
     if (!loaded || !character) return
     
-    // Weekly Reset für Schritte
-    const lastSync = new Date(character.last_step_sync)
+    const lastSync = character?.last_step_sync ? new Date(character.last_step_sync) : new Date(0)
     const now = new Date()
     const diff = (now - lastSync) / (1000 * 60 * 60 * 24)
+    
+    const updates = {}
     if (diff >= 7) {
-      updateCharacter({ weekly_steps: 0, steps_reward_claimed: false })
+      updates.weekly_steps = 0
+      updates.steps_reward_claimed = false
+    }
+    
+    // Daily Reset für Schritte
+    if (lastSync.toDateString() !== now.toDateString()) {
+      updates.daily_steps = 0
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateCharacter(updates)
     }
 
     const nowIso = new Date().toISOString()
@@ -571,7 +582,23 @@ export function AdventureProvider({ children }) {
 
   const deleteMonster = useCallback(async (monsterUid) => {
     if (!user) return
+    
+    // Zuerst aus dem Team entfernen, falls vorhanden
+    setUserTeam(prev => {
+      const next = { ...prev }
+      if (next.slot_1 === monsterUid) next.slot_1 = null
+      if (next.slot_2 === monsterUid) next.slot_2 = null
+      if (next.slot_3 === monsterUid) next.slot_3 = null
+      
+      if (REMOTE) {
+        upsertUserTeam(user.id, next)
+      }
+      return next
+    })
+
+    // Dann aus der Sammlung entfernen
     setUserMonsters(prev => prev.filter(m => m.id !== monsterUid))
+    
     if (REMOTE) {
       await releaseMonster(monsterUid)
     }
@@ -665,9 +692,11 @@ export function AdventureProvider({ children }) {
   async function syncSteps(steps) {
     if (!user) return
     const newWeekly = (character.weekly_steps || 0) + steps
+    const newDaily = (character.daily_steps || 0) + steps
     await updateCharacter({ 
       total_steps: (character.total_steps || 0) + steps,
       weekly_steps: newWeekly,
+      daily_steps: newDaily,
       last_step_sync: new Date().toISOString()
     })
   }

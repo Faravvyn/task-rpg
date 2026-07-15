@@ -33,10 +33,20 @@ export default function TaskItem({ task, completions, onEdit }) {
   const handleComplete = async (e) => {
     if (!available || completing || verifying) return
     
-    // Falls Foto-Verifizierung nötig
+    // Foto-Verifizierung
     if (task.verification_type === 'photo' && !completedToday) {
       fileInputRef.current?.click()
       return
+    }
+
+    // Schritte-Verifizierung
+    if (task.verification_type === 'steps' && !completedToday) {
+      const currentSteps = character?.daily_steps || 0
+      const reqSteps = task.verification_value || 0
+      if (currentSteps < reqSteps) {
+        alert(`❌ Nicht genug Schritte! Du hast heute ${currentSteps.toLocaleString()} von ${reqSteps.toLocaleString()} benötigten Schritten gesammelt. Synchronisiere deine Schritte zuerst auf dem Dashboard!`)
+        return
+      }
     }
 
     setCompleting(true); setShowXp(true)
@@ -82,19 +92,21 @@ export default function TaskItem({ task, completions, onEdit }) {
            task.verification_type === 'photo' ? <Camera className="w-4 h-4 text-gray-400" /> : null}
         </button>
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{categoryEmojis[task.category]||'📝'}</span>
-            <h3 className={`font-semibold truncate ${available?'text-gray-100':'text-gray-500 line-through'}`}>{task.title}</h3>
-            {task.verification_type === 'photo' && available && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 rounded uppercase font-bold">Foto nötig</span>}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{categoryEmojis[task.category]||'📝'}</span>
+              <h3 className={`font-semibold truncate ${available?'text-gray-100':'text-gray-500 line-through'}`}>{task.title}</h3>
+              {task.verification_type === 'photo' && available && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 rounded uppercase font-bold">Foto</span>}
+              {task.verification_type === 'steps' && available && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 rounded uppercase font-bold">Schritte</span>}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`badge border ${difficultyColors[task.difficulty]}`}>{task.difficulty}</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500">{repeatIcons[task.repeat_type]}{repeatLabels[task.repeat_type]}</span>
+              <span className="text-xs text-gold-500 font-semibold">+{baseXp} XP</span>
+              {task.verification_type === 'steps' && available && <span className="text-[10px] text-blue-400 font-bold tracking-tighter">{character?.daily_steps || 0} / {task.verification_value?.toLocaleString()} 🚶</span>}
+              {task.verification_target && task.verification_type === 'photo' && available && <span className="text-[10px] text-gray-500">Ziel: {task.verification_target}</span>}
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`badge border ${difficultyColors[task.difficulty]}`}>{task.difficulty}</span>
-            <span className="flex items-center gap-1 text-xs text-gray-500">{repeatIcons[task.repeat_type]}{repeatLabels[task.repeat_type]}</span>
-            <span className="text-xs text-gold-500 font-semibold">+{baseXp} XP</span>
-            {task.verification_target && available && <span className="text-[10px] text-gray-500">Ziel: {task.verification_target}</span>}
-          </div>
-        </div>
         
         <div className="flex items-center gap-1">
           {available&&<button onClick={()=>setExpanded(!expanded)} className="p-1.5 text-gray-500 hover:text-gray-300 rounded">{expanded?<ChevronUp className="w-4 h-4"/>:<ChevronDown className="w-4 h-4"/>}</button>}

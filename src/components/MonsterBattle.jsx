@@ -148,7 +148,10 @@ export default function MonsterBattle() {
     if (Math.random() < catchRate) {
       vibrate(VIBRATION_PATTERNS.LEVEL_UP)
       setBattleLog(prev => [`Erfolg! ${activeMiniBoss.name} wurde gefangen!`, ...prev])
-      await catchMonster(activeMiniBoss.id)
+      
+      // Nutze die monster_id aus dem aktiven Boss für den Eintrag
+      await catchMonster(activeMiniBoss.monster_id || activeMiniBoss.id)
+      
       setTimeout(() => setActiveMiniBoss(null), 2000)
     } else {
       setBattleLog(prev => ["Es ist ausgebrochen!", ...prev])

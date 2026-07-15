@@ -131,8 +131,9 @@ DROP POLICY IF EXISTS "Character aktualisieren" ON characters;
 CREATE POLICY "Character aktualisieren" ON characters FOR UPDATE USING (auth.uid() = user_id);
 
 -- 3. TASKS (Erweiterung für Verifizierung)
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_type TEXT DEFAULT 'none'; -- none | photo
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_target TEXT; -- z.B. "Baum", "Kaffee", "Hund"
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_type TEXT DEFAULT 'none'; -- none | photo | steps
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_target TEXT; -- z.B. "Baum" oder NULL bei Schritten
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_value INTEGER; -- Benötigte Schritte
 
 -- Storage für Verifizierungs-Fotos (Bucket erstellen falls möglich via UI, hier Policy)
 -- Hinweis: In Supabase muss manuell ein Bucket 'task-verification' erstellt werden.
