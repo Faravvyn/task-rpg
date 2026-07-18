@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'inline',
+      registerType: 'prompt', // Update-Aufforderung statt automatischer Versuch
+      injectRegister: 'auto',
       manifest: {
         name: 'TaskRPG - Queste dein Leben',
         short_name: 'TaskRPG',
@@ -27,12 +27,27 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Explicitly only cache essential assets to avoid conflicts
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg}'],
         maximumFileSizeToCacheInBytes: 5000000,
-        navigateFallback: '/index.html'
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true // Veralteten Cache sofort löschen
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) return 'vendor-react';
+            if (id.includes('lucide')) return 'vendor-icons';
+            if (id.includes('supabase')) return 'vendor-supabase';
+            return 'vendor';
+          }
+        }
+      }
+    },
+    chunkSizeWarningLimit: 800
+  },
   server: { port: 5173 }
 })
