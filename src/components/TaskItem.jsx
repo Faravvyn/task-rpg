@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Check, Trash2, Edit3, ChevronDown, ChevronUp, RotateCcw, Clock, Star, Camera, Loader2 } from 'lucide-react'
 import { useGame } from '../hooks/useGame'
+import { useCharacter } from '../hooks/useCharacter'
 import { isTaskAvailable, isTaskCompletedToday } from '../utils/streak'
 import { getXpReward, getStreakMultiplier, calculateFinalXp } from '../utils/xp'
 import { calculateStreak } from '../utils/streak'
@@ -18,6 +19,7 @@ const categoryEmojis = { haushalt:'🏠', gesundheit:'💊', lernen:'📚', arbe
 
 export default function TaskItem({ task, completions, onEdit }) {
   const { completeTask, deleteTask } = useGame()
+  const { character } = useCharacter()
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [verifying, setVerifying] = useState(false)
