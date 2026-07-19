@@ -1,117 +1,77 @@
 # TaskRPG – Übergabe-Protokoll
 
-> Letzte Aktualisierung: 2026-05-30 · Vollständiger, rekonstruierbarer Quellcode in
-> **`PROJEKT_SNAPSHOT.txt`** (`>>>FILE: pfad ... >>>END`, 67 Dateien, round-trip-verifiziert).
+> Letzte Aktualisierung: 2026-06-19 · Vollständiger, rekonstruierbarer Quellcode in
+> **`PROJEKT_SNAPSHOT.txt`** (71 Dateien, PWA + Monster-System + Fitness).
 
 ---
 
-## 1. Projektüberblick
+## 1. Projektstatus: "Monster-Collector & Fitness Update"
 
-**TaskRPG** – React + Vite PWA, Alltagsaufgaben mit RPG-Gamification (XP, Level,
-Stats, Streaks, Klassen, Artefakte, Boss, Arena, Quests, Achievements).
-Backend: **Supabase** (Auth + Postgres + Realtime). Styling: **Tailwind**
-(Custom-Klassen in `src/index.css`).
-
-Start:
-```bash
-npm install
-cp .env.example .env       # VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-# init.sql UND adventure.sql im Supabase SQL-Editor ausführen
-npm run dev                # http://localhost:5173
-```
-Ohne Supabase-Konfiguration → automatischer **localStorage-Fallback**.
+TaskRPG ist nun eine vollwertige Monster-Sammel-App mit Fitness-Integration.
+Nutzer erledigen Aufgaben, um XP zu sammeln, Monster-Spuren zu finden, wilde
+Kreaturen in rundenbasierten Kämpfen zu fangen und ihr Team zu trainieren.
 
 ---
 
-## 2. Status
-- ✅ `npm run build` erfolgreich
-- ✅ Dev-Server HTTP 200, keine Konsolenfehler
-- ✅ `PROJEKT_SNAPSHOT.txt` parst 1:1 zurück (0 Abweichungen, 67 Dateien)
+## 2. Kern-Features & Mechaniken
+
+### 🐾 Monster-System
+- **Sammlung:** 26+ Monster mit Typen (Feuer, Wasser, Erde, etc.) und Seltenheit.
+- **Monster Lexicon:** Übersicht aller entdeckten Kreaturen mit Zusatzinfos
+  (Gewicht, Größe, Vorlieben), sobald sie gefangen wurden.
+- **Team-Management:** Auswahl von 3 aktiven Monstern für Duelle.
+- **Zuneigung (Affection):** Monster verlieren über Zeit an Laune. Interaktionen
+  (Streicheln/Füttern) über reale Kurz-Tasks (Situps/Laufen) stellen diese wieder her.
+- **Level-Up:** Monster erhalten XP durch Dungeon-Fortschritt. Stat-Punkte (HP, ATK, DEF)
+  können manuell verteilt werden.
+
+### ⚔️ Kampfsystem (Monster Battle)
+- **Rundenbasiert:** Pokémon-Stil Kampf-Engine.
+- **Typ-Vorteile:** Doppelter Schaden bei effektiven Typ-Paarungen.
+- **Task-basierte Moves:** Starke Angriffe erfordern die Bestätigung einer realen
+  Aktion (z.B. 10 Liegestütze).
+- **Fangen:** Wilde Monster (Mini-Bosse) können unter 50% HP mit variabler
+  Chance gefangen werden.
+
+### 🚶 Fitness & Pedometer
+- **Google Fit Sync:** Simulierter OAuth-Prozess für täglichen Schritt-Abgleich.
+- **Schritte-Rewards:** Wöchentliche Ziele (50k, 60k, 80k) für seltene Artefakt-Drops.
+- **Schritte-Tasks:** Aufgaben können nun eine Mindestanzahl an Tages-Schritten zur
+  Verifizierung erfordern.
+
+### 🛡️ RPG-Elemente & Dungeon
+- **Dungeon Crawler:** Jede Task rückt den Spieler einen Raum vor. Alle 10 Räume:
+  neue Ebene + Beutetruhe + Monster-XP.
+- **Wöchentlicher Boss:** 5 Bosse mit individuellen High-Res Artworks und
+  angepassten HP-Werten für bessere Balance.
+- **Alchemist-Shop:** Kauf von Elixieren (XP-Boost) und Monster-Ködern (Lures).
 
 ---
 
-## 3. Letzte Sitzung – Bugfixes & Features
+## 3. Technische Highlights
 
-### 🐞 Bugfixes
-1. **„Could not find the 'custom_description' column … schema cache"** + **Katalog-Quests
-   wurden nicht gesendet.** Ursache: Client schickte immer `custom_*`-Felder, DB hatte
-   die Spalten (noch) nicht → *jeder* Insert schlug fehl.
-   - `adventureRepo.insertFriendTask`: sendet `custom_*` **nur** bei eigener Quest
-     (`quest_id === '__custom__'`) und hat einen **Fallback**, der bei fehlenden
-     Spalten Titel/Beschreibung in `message` packt.
-   - `adventure.sql`: `ADD COLUMN IF NOT EXISTS custom_title/custom_description`
-     + abschließend `NOTIFY pgrst, 'reload schema';` (Cache-Reload).
-   - ⚠️ **`adventure.sql` einmal erneut ausführen.**
-
-### ✨ Persistenz-Upgrade (Cross-Device)
-- **Achievements & Meilensteine**: Werden nun in der Tabelle `user_achievements` in Supabase persistiert.
-  - Automatischer Sync beim Login.
-  - Fallback auf `localStorage`, falls Supabase nicht konfiguriert ist.
-- **Wöchentliches Loadout**: Die gewählten Doppelbonus-Slots werden in `user_loadout` gespeichert.
-  - Persistenz pro Nutzer und Woche (`week_start`).
-- **Zufalls-Events**: Bleiben clientseitig (deterministisch). Da `getTodayEvent` rein auf dem aktuellen Datum basiert, sehen alle Nutzer (und derselbe Nutzer auf verschiedenen Geräten) konsistent dasselbe Event, ohne dass eine DB-Synchronisation nötig ist.
-
-### ✨ Equipment-System unter „Held"
-- **6 Ausrüstungs-Slots**: Helm, Waffe, Rüstung, Stiefel, Ring, Amulett
-  (`EQUIP_SLOTS`, `ARTIFACT_SLOT`, `slotForArtifact` in `utils/adventure.js`).
-- **`components/EquipmentSlots.jsx`**: Silhouetten-Slots, Tap → Auswahl passender
-  Artefakte aus dem Inventar; pro Slot genau **ein** Artefakt (ersetzt automatisch).
-- **`pages/CharacterPage.jsx`** neu: Tabs Profil / **Ausrüstung** / Stats / Inventar.
-  Inventar trennt **„Ausgerüstet – aktiv"** von **„Inventar – inaktiv"** (ausgegraut).
-- **Wichtig (Spielregel):** Nur **ausgerüstete** Artefakte sind aktiv. Set-Boni und
-  alle Effekte zählen jetzt über **`equippedArtifactIdsUnique`** statt Besitz:
-  - `AdventureContext`: `completedSetBonuses`, Quest-XP-Set-Bonus, `dealBossDamage`,
-    `fightArena` → equipped.
-  - `GameContext.completeTask`: `applyXp(..., ownedArtifactIds: equippedArtifactIdsUnique)`.
-  - `BossPage`: Schadensmultiplikator über equipped.
-  - `setProgress` (Kodex/Sammelalbum) bleibt **besitzbasiert** (Sammelfortschritt).
+- **PWA-Optimierung:** 
+  - Install-Prompt in den Einstellungen.
+  - Update-Banner ("Update verfügbar!"), wenn neuer Code auf Netlify liegt.
+  - Haptisches Feedback (Vibration) auf Android.
+  - Code-Splitting / Lazy Loading für schnelle Ladezeiten auf Mobilgeräten.
+- **Persistence (Supabase):**
+  - Alle Monster, Teams, Achievements und das Loadout werden cross-device gespeichert.
+  - Realtime-Sync für Aufgaben (Änderung auf PC erscheint sofort auf Handy).
+- **Sicherheit:** 
+  - Passwortgeschützter Dev-Spawn (Passwort: `test`).
+  - Schutz vor unendlichem Schritt-Sync (1x pro Tag).
 
 ---
 
-## 4. Gesamtfunktionen (Adventure-Mode)
-- **Wöchentlicher Boss** (`BossPage`) – Tasks = Angriffe, Community-Schaden, Loot nach Anteil.
-- **Kodex/Sets** (`KodexPage`) – Sammelfortschritt + permanente Boni (aktiv nur wenn ausgerüstet).
-- **Schmiede** (`ForgePage`) – 3 gleiche Seltenheit + 50 XP → 1 Stufe höher.
-- **Arena** (`ArenaPage`) – 1v1, Artefakt-Einsatz, geschützte Artefakte.
-- **Sonderquests** (`QuestsPage`) – 1–3/Woche, 2–3 Tage, extra XP + Drop.
-- **Freundes-Quests** (`FriendsPage`) – Katalog **oder eigene Quest**, beide bekommen XP, Realtime.
-- **Ausrüstung/Loadout** (`LoadoutPage`) – Wochen-Slots mit doppeltem Bonus.
-- **Errungenschaften & Meilensteine** (`AchievementsPage`) – inkl. geheime „???".
-- **Zufalls-Events** – täglich, wirken auf XP/Boss-Schaden/Drop.
-- **Level-Up-Effekt** + **Achievement-Feier** + optionaler **Sound** (`utils/sound.js`).
-- **Benachrichtigungen** (`NotificationContext`, Bell) + Push-Einstellungen.
-- **Leaderboard** mit Arena-Siegen (XP + Siege×50).
-- **Illustrierte Empty States** (`components/EmptyState.jsx`).
+## 4. Offene Punkte / TODO
+1. Echte Google Fit API Anbindung (erfordert Client-ID & SSL auf Localhost).
+2. Fortgeschrittene KI-Bilderkennung für Foto-Tasks (statt Simulation).
+3. Sound-Effekte für das Monster-Kampfsystem.
 
 ---
 
-## 5. Architektur
-- **Provider-Reihenfolge** (`main.jsx`): `Auth → Adventure → Game → Achievement → Notification`.
-- **REMOTE-Schalter**: `isSupabaseConfigured()` → Supabase, sonst localStorage.
-- **Sicherheit**: XP via `SECURITY DEFINER`-RPCs (`attack_boss`, `complete_friend_task`).
-- **Slot-Zuordnung**: `ARTIFACT_SLOT` (fix je Artefakt) + Effekt-Fallback in `slotForArtifact`.
-
----
-
-## 6. Wichtige Dateien (Auswahl)
-- Logik: `utils/adventure.js` (Slots, applyXp, Schaden, Crafting, Arena),
-  `utils/quests.js`, `utils/achievements.js`, `utils/sound.js`, `utils/streak.js`, `utils/xp.js`
-- Context: `AdventureContext`, `GameContext`, `AchievementContext`, `NotificationContext`, `AuthContext`
-- Repo/DB: `lib/adventureRepo.js`, `supabase/migrations/init.sql`, `supabase/migrations/adventure.sql`
-- UI neu: `components/EquipmentSlots.jsx`, `components/EmptyState.jsx`,
-  `components/AchievementToast.jsx`, `components/DropReveal.jsx`,
-  `pages/CharacterPage.jsx`, `pages/AchievementsPage.jsx`, `pages/LoadoutPage.jsx`,
-  `pages/BossPage.jsx`, `pages/KodexPage.jsx`, `pages/ForgePage.jsx`, `pages/ArenaPage.jsx`, `pages/QuestsPage.jsx`
-
----
-
-## 7. Offene Punkte / TODO
-1. Echte Web-Push (Service Worker + VAPID) für geschlossene App.
-2. Tägliche Erinnerung / Streak-Warnung lösen noch keinen Timer aus.
-3. Bundle > 500 kB → optional Code-Splitting.
-
----
-
-## 8. Wiederherstellung
-`PROJEKT_SNAPSHOT.txt` einlesen → Dateien schreiben → `npm install` → `.env` setzen
-→ `init.sql` + `adventure.sql` ausführen → `npm run dev`.
+## 5. Wiederherstellung
+`PROJEKT_SNAPSHOT.txt` einlesen → Dateien schreiben → `npm install` → 
+`init.sql` + `adventure.sql` ausführen (Supabase) → `npm run dev`.
+**WICHTIG:** Auf Netlify immer "Clear cache and deploy site" nutzen bei Updates!

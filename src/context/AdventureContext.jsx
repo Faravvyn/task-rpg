@@ -161,8 +161,7 @@ export function AdventureProvider({ children }) {
       updateCharacter({ xp: newXp, level: calculateLevel(newXp).level })
     }
     try { localStorage.removeItem(pendingRewardsKey(user.id)) } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, character?.xp == null])
+  }, [user, character?.xp, REMOTE, updateCharacter])
 
   // ---------------- Freundes-Quests laden ----------------
   const refreshFriendTasks = useCallback(async () => {
@@ -329,28 +328,29 @@ export function AdventureProvider({ children }) {
     return { artifact: art, tier, percent }
   }, [state.boss, user, weekStart, REMOTE])
 
+  // Bereinige abgelaufene Items & Schritte-Reset nur bei Load-Änderung
+  const inventoryCleanupRef = useRef(null)
   useEffect(() => {
     if (!loaded || !character) return
-    
     const lastSync = character?.last_step_sync ? new Date(character.last_step_sync) : new Date(0)
-    const now = new Date()
-    const diff = (now - lastSync) / (1000 * 60 * 60 * 24)
-    
+    const nowDate = new Date()
+    const diff = (nowDate - lastSync) / (1000 * 60 * 60 * 24)
     const updates = {}
     if (diff >= 7) {
       updates.weekly_steps = 0
       updates.steps_reward_claimed = false
     }
-    
-    // Daily Reset für Schritte
-    if (lastSync.toDateString() !== now.toDateString()) {
+    if (lastSync.toDateString() !== nowDate.toDateString()) {
       updates.daily_steps = 0
     }
-
     if (Object.keys(updates).length > 0) {
       updateCharacter(updates)
     }
+  }, [loaded, character?.last_step_sync, character?.weekly_steps])
 
+  // Abgelaufene Items separat behandeln (nur bei Inventory-Änderungen)
+  useEffect(() => {
+    if (!loaded) return
     const nowIso = new Date().toISOString()
     const expired = state.inventory.filter(i => i.expiresAt && i.expiresAt < nowIso)
     if (expired.length > 0) {
@@ -628,10 +628,13 @@ export function AdventureProvider({ children }) {
       setUserMonsters(prev => {
         let changed = false
         const next = prev.map(m => {
-          if ((m.affection || 0) > 0) {
+          if ((m.affection || 100) > 0) {
             changed = true
-            const newAff = Math.max(0, m.affection - 1)
-            if (REMOTE) updateMonster(m.id, { affection: newAff })
+            const newAff = Math.max(0, (m.affection || 100) - 1)
+            // Fire-and-forget Persistenz – nicht im setState blocken
+            if (REMOTE) {
+              setTimeout(() => updateMonster(m.id, { affection: newAff }), 0)
+            }
             return { ...m, affection: newAff }
           }
           return m
@@ -640,7 +643,7 @@ export function AdventureProvider({ children }) {
       })
     }, 1000 * 60 * 60) // -1 Affection pro Stunde
     return () => clearInterval(interval)
-  }, [loaded, userMonsters.length, REMOTE])
+  }, [loaded, userMonsters, REMOTE])
 
   const interactWithMonster = useCallback(async (monsterUid, type = 'pet') => {
     const m = userMonsters.find(it => it.id === monsterUid)
@@ -671,18 +674,19 @@ export function AdventureProvider({ children }) {
     questCatalog: SPECIAL_QUESTS, questMap: QUEST_MAP, now,
     friendTasks, pendingFriendTasksCount, sendFriendTask, acceptFriendTask, declineFriendTask, completeFriendTask,
     allArtifacts: ARTIFACTS,
-    userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss,
+    userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss, setUserMonsters,
     allMonsters: MONSTERS, monsterMap: MONSTER_MAP,
     claimStepReward, syncSteps,
     interactWithMonster, deleteMonster
   }
 
   async function claimStepReward() {
-    if (!user || character.steps_reward_claimed) return
+    if (!user || !character || character.steps_reward_claimed) return
     let rarity = 'common'
-    if (character.weekly_steps >= 80000) rarity = 'legendary'
-    else if (character.weekly_steps >= 60000) rarity = 'epic'
-    else if (character.weekly_steps >= 50000) rarity = 'rare'
+    const steps = character.weekly_steps || 0
+    if (steps >= 80000) rarity = 'legendary'
+    else if (steps >= 60000) rarity = 'epic'
+    else if (steps >= 50000) rarity = 'rare'
     else return
 
     await addArtifact(rollArtifact(rarity).id, 'quest')

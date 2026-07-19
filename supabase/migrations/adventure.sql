@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS user_achievements (
 ALTER TABLE user_achievements ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "UA lesen" ON user_achievements;    CREATE POLICY "UA lesen"    ON user_achievements FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "UA schreiben" ON user_achievements; CREATE POLICY "UA schreiben" ON user_achievements FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "UA aendern" ON user_achievements;   CREATE POLICY "UA aendern"   ON user_achievements FOR UPDATE USING (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS idx_ua_user ON user_achievements(user_id);
 
 -- ---------------------------------------------------------------------
@@ -261,7 +262,7 @@ BEGIN
   RETURN NEXT;
 END; $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Freundes-Quest abschließen: nur der Empfänger; beide bekommen XP.
+-- Freundes-Quest abschließen: nur der Empfänger im Status 'accepted'; beide bekommen XP.
 CREATE OR REPLACE FUNCTION complete_friend_task(p_task_id UUID)
 RETURNS TABLE(reward INT) AS $$
 DECLARE v_uid UUID := auth.uid(); v_task friend_tasks%ROWTYPE; v_reward INT;
@@ -270,6 +271,7 @@ BEGIN
   IF v_task.id IS NULL THEN RAISE EXCEPTION 'task not found'; END IF;
   IF v_task.receiver_id <> v_uid THEN RAISE EXCEPTION 'only receiver can complete'; END IF;
   IF v_task.status = 'completed' THEN reward := 0; RETURN NEXT; RETURN; END IF;
+  IF v_task.status <> 'accepted' THEN RAISE EXCEPTION 'task must be accepted first'; END IF;
   v_reward := 40 + COALESCE(v_task.stake_xp, 0);   -- FRIEND_QUEST_XP + Einsatz
   UPDATE friend_tasks SET status = 'completed', completed_at = NOW() WHERE id = p_task_id;
   PERFORM _apply_xp(v_task.receiver_id, v_reward);

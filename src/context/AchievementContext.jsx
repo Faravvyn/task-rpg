@@ -177,7 +177,7 @@ export function AchievementProvider({ children }) {
   const dismissCelebration = useCallback(() => setCelebration(null), [])
 
   // ---- Zufalls-Event des Tages ----
-  const todayEvent = useMemo(() => getTodayEvent(formatDate(new Date())), [])
+  const todayEvent = useMemo(() => getTodayEvent(formatDate(new Date())), [statsWithQuests])
 
   const unlockedCount = useMemo(() =>
     achievementStates.filter((a) => a.done).length + milestoneProgress.filter((m) => m.done).length,

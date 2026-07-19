@@ -5,10 +5,11 @@ import { useCharacter } from '../hooks/useCharacter'
 import { useTasks } from '../hooks/useTasks'
 import TaskItem from '../components/TaskItem'
 import XPBar from '../components/XPBar'
+import StepSync from '../components/StepSync'
 import { getStreakMultiplier } from '../utils/xp'
 import { 
   Flame, Zap, Target, TrendingUp, CheckCircle2, 
-  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight, Footprints, Trophy as TrophyIcon
+  Clock, Star, ScrollText, Sparkles, Skull, ChevronRight
 } from 'lucide-react'
 import { useAdventure } from '../context/AdventureContext'
 import { formatTimeLeft } from '../utils/quests'
@@ -17,44 +18,11 @@ import EmptyState from '../components/EmptyState'
 import StarterTutorial from '../components/StarterTutorial'
 
 export default function DashboardPage() {
-  const { profile, character, updateCharacter } = useAuth()
+  const { profile, character } = useAuth()
   const { levelInfo, streak, todayXp, weekXp, hasDoneTaskToday } = useCharacter()
   const { availableTasks, completedToday, completions } = useTasks()
-  const { activeQuests, now, syncSteps, claimStepReward } = useAdventure()
+  const { activeQuests, now, spawnMiniBoss } = useAdventure()
   const { monsterHint, dispatch: gameDispatch } = useGame()
-  
-  const [syncing, setSyncing] = useState(false)
-  const [fitConnected, setFitConnected] = useState(() => localStorage.getItem('google_fit_connected') === '1')
-
-  const handleSync = async () => {
-    if (!fitConnected) {
-       const confirm = window.confirm("Möchtest du TaskRPG mit Google Fit verbinden, um deine Schritte automatisch zu synchronisieren?");
-       if (confirm) {
-          setSyncing(true);
-          await new Promise(r => setTimeout(r, 2000)); // Simuliere OAuth
-          localStorage.setItem('google_fit_connected', '1');
-          setFitConnected(true);
-          alert("Erfolgreich mit Google Fit verbunden!");
-       } else return;
-    }
-
-    setSyncing(true)
-    
-    // Täglicher Schutz vor unendlichem Sync
-    const today = new Date().toDateString()
-    const lastSyncDate = character?.last_step_sync ? new Date(character.last_step_sync).toDateString() : ''
-    
-    if (today === lastSyncDate) {
-       alert("Google Fit meldet: Alle Schritte für heute sind bereits synchronisiert!");
-       setSyncing(false);
-       return;
-    }
-
-    // Simuliere echtes Abrufen der Tages-Schrittzahl
-    const stepsFromFit = Math.floor(Math.random() * 4000) + 6000 
-    await syncSteps(stepsFromFit)
-    setSyncing(false)
-  }
   const streakBonus = Math.round((getStreakMultiplier(streak)-1)*100)
   const totalTasksToday = availableTasks.length + completedToday.length
   return (
@@ -73,41 +41,8 @@ export default function DashboardPage() {
       </div>
       <div className="card"><XPBar/></div>
 
-      {/* Step Tracker */}
-      <div className="card border-blue-500/30 bg-blue-500/5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Footprints className="w-5 h-5 text-blue-400" />
-            <h3 className="font-title text-sm text-gray-200">{fitConnected ? 'Google Fit Sync' : 'Fitness Tracker'}</h3>
-          </div>
-          <button 
-            onClick={handleSync} 
-            disabled={syncing}
-            className={`text-[10px] ${fitConnected ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'} border border-current px-2 py-1 rounded-lg animate-pulse`}
-          >
-            {syncing ? 'Verbinde...' : fitConnected ? 'Schritte abrufen' : 'Google Fit verbinden'}
-          </button>
-        </div>
-        
-        <div className="flex items-end gap-2 mb-2">
-          <span className="text-2xl font-title text-blue-400 font-bold">{(character?.weekly_steps || 0).toLocaleString()}</span>
-          <span className="text-xs text-gray-500 mb-1">/ 80.000</span>
-        </div>
-
-        <div className="stat-bar h-1.5 mb-3">
-          <div className="stat-bar-fill bg-blue-500" style={{ width: `${Math.min(100, (character?.weekly_steps || 0) / 80000 * 100)}%` }} />
-        </div>
-
-        <div className="flex justify-between items-center">
-           <p className="text-[10px] text-gray-500">
-             {character?.weekly_steps < 50000 ? `Noch ${(50000 - character.weekly_steps).toLocaleString()} bis zur Belohnung` : 'Wochenziel erreicht!'}
-           </p>
-           {character?.weekly_steps >= 50000 && !character?.steps_reward_claimed && (
-             <button onClick={claimStepReward} className="btn-primary text-[10px] py-1 px-3">Belohnung abholen</button>
-           )}
-           {character?.steps_reward_claimed && <span className="text-[10px] text-green-500 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Abgeholt</span>}
-        </div>
-      </div>
+      {/* Fitness & Schritte – echter Multi-Provider Sync */}
+      <StepSync />
       
       {/* Dungeon Crawler Progress */}
       <div 
@@ -140,11 +75,7 @@ export default function DashboardPage() {
           </div>
           {/* Button um manuell den Mini-Boss zu spawnen (Demo-Zwecke) */}
           <button 
-            onClick={() => {
-              const { spawnMiniBoss } = useAdventure(); // Oops, can't use hook inside onClick like this if not already in scope
-              // I'll just clear the hint for now and assume the user does the task.
-              // In a real app, we'd check if they did the task.
-            }}
+            onClick={() => spawnMiniBoss()}
             className="hidden"
           ></button>
         </div>

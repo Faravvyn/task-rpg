@@ -58,7 +58,7 @@ export default function MonsterBattle() {
     let isWeak = false
     let isStrong = false
     
-    const defType = defender.type || MONSTER_MAP[defender.monster_id]?.type
+    const defType = MONSTER_MAP[defender.monster_id]?.type || defender.type
     
     if (TYPE_CHART[move.type]?.strong === defType) {
        mult = 2.0 // Doppelt bei Schwäche
@@ -191,7 +191,7 @@ export default function MonsterBattle() {
                <div className="absolute -top-16 -right-12 w-32 h-32 overflow-hidden rounded-full border-2 border-blue-500/30 shadow-lg">
                   <img src={getMonsterImageUrl(playerMonster)} alt="Player Monster" className="w-full h-full object-cover" />
                </div>
-               <p className="font-title text-sm text-gray-100 pr-16">{playerMonster.nickname || MONSTER_MAP[playerMonster.monster_id].name}</p>
+               <p className="font-title text-sm text-gray-100 pr-16">{playerMonster.nickname || MONSTER_MAP[playerMonster.monster_id]?.name || 'Unbekannt'}</p>
                <div className="mt-2 h-2 bg-dark-500 rounded-full overflow-hidden">
                  <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${(playerHp/(playerMonster.stats.hp*2))*100}%` }} />
                </div>

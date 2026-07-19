@@ -5,7 +5,7 @@ import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bon
 import { updateMonster } from '../lib/adventureRepo'
 
 export default function MonsterPage() {
-  const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster } = useAdventure()
+  const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster, setUserMonsters } = useAdventure()
   const [selectingFor, setSelectingFor] = useState(null) // slot_1, slot_2, slot_3
   const [inspecting, setInspecting] = useState(null) // monsterUid
   const [view, setView] = useState('team') // team | lexicon
@@ -27,8 +27,11 @@ export default function MonsterPage() {
     const m = userMonsters.find(it => it.id === monsterUid)
     if (!m || (m.stat_points || 0) <= 0) return
     const newStats = { ...m.stats }; newStats[statKey] = (newStats[statKey] || 0) + 1
-    await updateMonster(monsterUid, { stats: newStats, stat_points: m.stat_points - 1 })
-    window.location.reload(); 
+    const updated = { stats: newStats, stat_points: m.stat_points - 1 }
+    await updateMonster(monsterUid, updated)
+    // Aktualisiere den lokalen State ohne Page-Reload
+    setUserMonsters(prev => prev.map(it => it.id === monsterUid ? { ...it, ...updated } : it))
+    setInspecting(prev => prev === monsterUid ? { ...m, ...updated } : prev)
   }
 
   const inspectedMonster = userMonsters.find(m => m.id === inspecting)
@@ -72,8 +75,8 @@ export default function MonsterPage() {
                        <img src={getMonsterImageUrl(inspectedMonster)} className="w-full h-full object-cover" />
                     </div>
                     <div>
-                        <h3 className="font-title text-lg text-gold-300">{inspectedMonster.nickname || MONSTER_MAP[inspectedMonster.monster_id].name}</h3>
-                        <p className="text-xs text-gray-400">Level {inspectedMonster.level} • {MONSTER_MAP[inspectedMonster.monster_id].type}</p>
+                        <h3 className="font-title text-lg text-gold-300">{inspectedMonster.nickname || MONSTER_MAP[inspectedMonster.monster_id]?.name || 'Unbekannt'}</h3>
+                        <p className="text-xs text-gray-400">Level {inspectedMonster.level} • {MONSTER_MAP[inspectedMonster.monster_id]?.type || '???'}</p>
                         <div className="mt-2 flex items-center gap-2">
                            <span className="text-[10px] text-gray-500 uppercase">Zuneigung:</span>
                            <div className="w-20 h-1.5 bg-dark-500 rounded-full overflow-hidden">

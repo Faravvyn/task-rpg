@@ -229,8 +229,14 @@ export async function fetchUserAchievements(userId) {
 }
 
 export async function insertUserAchievement(userId, achievementId) {
-  const { error } = await supabase.from('user_achievements').insert({ user_id: userId, achievement_id: achievementId })
-  if (error && error.code !== '23505') console.warn('Achievement insert:', error.message)
+  // Nutze upsert statt insert um 409-Konflikte zu vermeiden
+  const { error } = await supabase.from('user_achievements').upsert({ 
+    user_id: userId, 
+    achievement_id: achievementId,
+    unlocked_at: new Date().toISOString()
+  }, { onConflict: 'user_id, achievement_id' })
+  
+  if (error) console.warn('Achievement upsert:', error.message)
 }
 
 // ---------------------------------------------------------------------
@@ -260,6 +266,7 @@ export async function releaseMonster(monsterUid) {
 // Wöchentliche Arena-Siege je Spieler (für Leaderboard-Wertung)
 // Gibt eine Map { user_id: winCount } zurück.
 export async function fetchArenaWinCounts(weekStart) {
+  if (!isSupabaseConfigured()) return {}
   const { data, error } = await supabase.from('arena_results')
     .select('user_id, won').eq('week_start', weekStart).eq('won', true)
   if (error) { console.warn('Arena-Wins:', error.message); return {} }

@@ -44,6 +44,8 @@ export function GameProvider({ children }) {
     dealBossDamage, equippedArtifactIds, equippedArtifactIdsUnique, 
     doubledArtifactIds, grantRandomArtifact, userTeam, userMonsters 
   } = useAdventure()
+  
+  const Pr = calculateLevel // Definition nach oben verschoben
   const todayEvent = getTodayEvent(formatDate(new Date()))
   const eventXpMult = todayEvent?.effect?.type === 'xp_mult' ? todayEvent.effect.value : 1
 
@@ -221,7 +223,9 @@ export function GameProvider({ children }) {
 
     // --- Monster Encounter Logik ---
     const luck = character.stats?.glueck || 0
-    const hintChance = 0.1 + (luck * 0.01)
+    const hasLure = (character.consumables?.monster_lure || 0) > 0
+    const hintChance = hasLure ? 1.0 : (0.2 + (luck * 0.02)) // Höhere Basis-Chance
+    
     if (Math.random() < hintChance) {
       const bossTriggers = [
         "Mache 20 Liegestütze um einen Erden-Typ Mini-Boss zu locken!",
@@ -231,6 +235,11 @@ export function GameProvider({ children }) {
       ]
       const hint = bossTriggers[Math.floor(Math.random() * bossTriggers.length)]
       dispatch({ type: 'SET_MONSTER_HINT', payload: hint })
+      
+      if (hasLure) {
+         const newConsumables = { ...character.consumables, monster_lure: character.consumables.monster_lure - 1 }
+         updateCharacter({ consumables: newConsumables })
+      }
     }
 
     let newRoom = (character.dungeon_room || 0) + 1
@@ -374,5 +383,5 @@ export function GameProvider({ children }) {
     </GameContext.Provider>
   )
 }
-const Pr = calculateLevel
+export { GameContext }
 export default GameContext

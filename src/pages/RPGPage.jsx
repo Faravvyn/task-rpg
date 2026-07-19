@@ -14,6 +14,7 @@ import {
 const consumables = [
   { id: 'potion_xp', name: 'XP-Elixier', desc: '+50% XP für die nächste Stunde.', cost: 50, icon: '🧪', type: 'buff' },
   { id: 'potion_luck', name: 'Glücks-Tinktur', desc: '+20% Artefakt-Drop-Chance (1h).', cost: 75, icon: '🍀', type: 'buff' },
+  { id: 'monster_lure', name: 'Monster-Köder', desc: 'Garantiert eine Monster-Spur bei der nächsten Task.', cost: 100, icon: '🍖', type: 'item' },
   { id: 'streak_shield', name: 'Streak-Schild', desc: 'Schützt deinen Streak bei Vergessen.', cost: 150, icon: '🛡️', type: 'item' },
 ]
 

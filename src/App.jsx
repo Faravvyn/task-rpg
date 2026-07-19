@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import LoadingSpinner from './components/LoadingSpinner'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Lazy Loading für Seiten
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -39,8 +40,9 @@ export default function App() {
     </div>
   )
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Routes>
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
         <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -67,8 +69,9 @@ export default function App() {
         </Route>
         <Route path="/invite/:username" element={<InviteRedirect />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   )
 }
 function InviteRedirect() {
