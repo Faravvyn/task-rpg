@@ -62,17 +62,37 @@ class GoogleFitProvider {
   color = 'bg-blue-500'
   textColor = 'text-blue-400'
 
+  // Hilfsfunktion: bereinigt Env-Werte von versehentlichem Markdown-Format
+  _cleanEnv(val) {
+    if (!val) return ''
+    // Entferne [text](url)-Markdown falls versehentlich kopiert
+    const m = val.match(/^\[.*\]\((.*)\)$/)
+    if (m) return m[1]
+    return val.trim()
+  }
+
   get clientId() {
-    // Aus Umgebungsvariable oder Fallback
-    return import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+    return this._cleanEnv(import.meta.env.VITE_GOOGLE_CLIENT_ID || '')
+  }
+
+  get clientSecret() {
+    return this._cleanEnv(import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '')
   }
 
   get redirectUri() {
-    return import.meta.env.VITE_GOOGLE_REDIRECT_URI || window.location.origin + '/fitness/callback'
+    const raw = this._cleanEnv(import.meta.env.VITE_GOOGLE_REDIRECT_URI || '')
+    if (raw) {
+      // Wenn die URI nicht auf /fitness/callback endet, hänge es an
+      // (Google braucht exakte Übereinstimmung mit dem was in der Console steht)
+      // Wir lassen den User selbst entscheiden – kein automatisches Anhängen
+      return raw
+    }
+    return window.location.origin + '/fitness/callback'
   }
 
   isAvailable() {
-    return !!this.clientId
+    // IMMER als verfügbar anzeigen – connect() gibt dann hilfreiche Fehlermeldung
+    return true
   }
 
   isConnected() {
@@ -84,14 +104,13 @@ class GoogleFitProvider {
   async connect() {
     if (!this.clientId) {
       throw new Error(
-        'Google Fit benötigt eine VITE_GOOGLE_CLIENT_ID in der .env-Datei.\n\n' +
-        'So erstellst du eine:\n' +
-        '1. Gehe zu https://console.cloud.google.com\n' +
-        '2. Erstelle ein Projekt → "APIs & Dienste" → "OAuth-Zustimmungsbildschirm"\n' +
-        '3. "APIs & Dienste" → "Bibliothek" → "Fitness API" aktivieren\n' +
-        '4. "Anmeldedaten" → "OAuth 2.0 Client-ID erstellen" (Typ: Webanwendung)\n' +
-        '5. Zugelassene Weiterleitungs-URI: ' + this.redirectUri + '\n' +
-        '6. Client-ID in .env eintragen: VITE_GOOGLE_CLIENT_ID=deine-id'
+        '🔧 Google Fit API-Key fehlt.\n\n' +
+        'Trage in deine .env-Datei ein:\n' +
+        'VITE_GOOGLE_CLIENT_ID=deine-client-id.apps.googleusercontent.com\n' +
+        'VITE_GOOGLE_CLIENT_SECRET=GOCSPX-dein-secret\n' +
+        'VITE_GOOGLE_REDIRECT_URI=https://task-rpg.netlify.app\n\n' +
+        'Danach: npm run dev NEU STARTEN!\n' +
+        'Auf Netlify: Env-Vars im Dashboard unter Site Settings → Environment setzen.'
       )
     }
 
@@ -108,48 +127,48 @@ class GoogleFitProvider {
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
 
-    // Versuche Popup (bessere UX auf Desktop), fallback zu Redirect
+    // Popup (bessere UX), Fallback zu Redirect
     return new Promise((resolve, reject) => {
       const popup = window.open(authUrl, 'google_fit_auth', 'width=500,height=700')
 
       if (popup) {
-        // Polling: auf Redirect im Popup warten
         const interval = setInterval(() => {
           try {
             if (popup.closed) {
               clearInterval(interval)
-              reject(new Error('Anmeldung abgebrochen – Popup wurde geschlossen.'))
+              reject(new Error('Anmeldung abgebrochen – Fenster wurde geschlossen.'))
               return
             }
-            // Prüfen ob Popup auf unseren Callback umgeleitet wurde
             try {
               if (popup.location.href.startsWith(this.redirectUri)) {
                 const url = new URL(popup.location.href)
                 const code = url.searchParams.get('code')
                 const returnedState = url.searchParams.get('state')
+                const errorParam = url.searchParams.get('error')
                 popup.close()
                 clearInterval(interval)
 
+                if (errorParam) {
+                  reject(new Error(`Google-Fehler: ${errorParam}. Prüfe ob die Redirect-URI in der Google Cloud Console exakt eingetragen ist.`))
+                  return
+                }
                 if (!code || !validateState(returnedState)) {
                   reject(new Error('OAuth-Fehler: Ungültige Antwort von Google.'))
                   return
                 }
                 this._exchangeCode(code).then(resolve).catch(reject)
               }
-            } catch (e) {
-              // Cross-origin – Popup ist noch auf Google, ignorieren
-            }
+            } catch (e) { /* cross-origin – ignorieren */ }
           } catch (e) {
             clearInterval(interval)
             reject(e)
           }
         }, 500)
 
-        // Timeout nach 3 Minuten
         setTimeout(() => {
           clearInterval(interval)
           if (!popup.closed) popup.close()
-          reject(new Error('Zeitüberschreitung bei der Google-Anmeldung.'))
+          reject(new Error('Zeitüberschreitung (3 Min). Bitte versuche es erneut.'))
         }, 180000)
       } else {
         // Popup blockiert → Redirect
@@ -172,7 +191,7 @@ class GoogleFitProvider {
       body: new URLSearchParams({
         code,
         client_id: this.clientId,
-        client_secret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '',
+        client_secret: this.clientSecret,
         redirect_uri: this.redirectUri,
         grant_type: 'authorization_code',
       }),
@@ -198,7 +217,7 @@ class GoogleFitProvider {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: this.clientId,
-        client_secret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '',
+        client_secret: this.clientSecret,
         refresh_token: tokens.refresh_token,
         grant_type: 'refresh_token',
       }),
