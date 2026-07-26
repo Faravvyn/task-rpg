@@ -5,8 +5,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useAdventure } from '../context/AdventureContext'
 import {
-  getAvailableProviders, getConnectedProviders, getProvider,
-  fetchStepsFromAllProviders, ManualProvider,
+  getConnectedProviders, getProvider,
+  fetchStepsFromAllProviders, ManualProvider, ALL_PROVIDERS,
 } from '../utils/fitnessProviders'
 import {
   Footprints, Link2, Link2Off, RefreshCw, CheckCircle2,
@@ -28,8 +28,9 @@ export default function StepSync() {
   const [availableProviders, setAvailableProviders] = useState([])
 
   useEffect(() => {
+    // Zeige ALLE Provider an, auch ohne API-Key (dann mit Hinweis)
+    setAvailableProviders(ALL_PROVIDERS.filter(p => p.id !== 'manual' && p.id !== 'apple_health'))
     setConnectedProviders(getConnectedProviders())
-    setAvailableProviders(getAvailableProviders().filter(p => p.id !== 'manual'))
   }, [])
 
   const showStatus = (msg, type) => {
@@ -243,35 +244,56 @@ export default function StepSync() {
 
           {/* Keine verbundenen Provider */}
           {connectedProviders.length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-2">
-              Noch kein Fitness-Tracker verbunden. Wähle einen Anbieter:
-            </p>
+            <div className="text-center py-3">
+              <p className="text-sm text-gray-300 font-semibold mb-2">📱 Fitness-Tracker verbinden</p>
+              <p className="text-xs text-gray-500 mb-3">Wähle einen Anbieter oder trag deine Schritte manuell ein:</p>
+            </div>
           )}
 
           {/* Verfügbare Provider (nicht verbunden) */}
           {availableProviders
             .filter(p => !connectedProviders.find(c => c.id === p.id))
-            .map(p => (
-              <div key={p.id} className="flex items-center gap-3 bg-dark-400/40 rounded-lg p-2 border border-gray-700/50">
-                <span className="text-xl">{p.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-300">{p.name}</p>
-                  <p className="text-[10px] text-gray-500 line-clamp-1">{p.description}</p>
+            .map(p => {
+              const needsSetup = !p.isAvailable()
+              return (
+                <div key={p.id} className={`flex items-center gap-3 rounded-lg p-2 border ${needsSetup ? 'bg-dark-400/20 border-gray-700/30' : 'bg-dark-400/40 border-gray-700/50'}`}>
+                  <span className="text-xl">{p.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-300">{p.name}</p>
+                    <p className="text-[10px] text-gray-500 line-clamp-1">{needsSetup ? '🔧 API-Key in .env nötig' : p.description}</p>
+                  </div>
+                  <button
+                    onClick={() => handleConnect(p.id)}
+                    disabled={connecting === p.id || needsSetup}
+                    className={`text-[10px] px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                      needsSetup
+                        ? 'bg-gray-700/30 text-gray-500 border-gray-700 cursor-not-allowed'
+                        : 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
+                    }`}
+                    title={needsSetup ? 'Erfordert API-Key-Konfiguration' : `Mit ${p.name} verbinden`}
+                  >
+                    {needsSetup ? 'Setup nötig' : connecting === p.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Link2 className="w-3 h-3" />
+                    )}
+                    {needsSetup ? '' : 'Verbinden'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleConnect(p.id)}
-                  disabled={connecting === p.id}
-                  className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-1 rounded-lg border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1"
-                >
-                  {connecting === p.id ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Link2 className="w-3 h-3" />
-                  )}
-                  Verbinden
-                </button>
-              </div>
-            ))}
+              )
+            })}
+
+          {/* Setup-Hinweis wenn nur manuelle Eingabe verfügbar */}
+          {availableProviders.every(p => !p.isAvailable()) && (
+            <div className="bg-dark-400/40 rounded-lg p-3 border border-gray-700/50 text-center">
+              <p className="text-xs text-gray-400 mb-2">
+                💡 Um Google Fit, Strava oder Fitbit zu nutzen, trage die API-Keys in der <code className="text-gold-400 bg-dark-500 px-1 rounded">.env</code>-Datei ein.
+              </p>
+              <p className="text-[10px] text-gray-500">
+                Anleitungen: <span className="text-blue-400">Google Cloud Console</span> · <span className="text-orange-400">Strava API</span> · <span className="text-cyan-400">Fitbit Dev</span>
+              </p>
+            </div>
+          )}
 
           {/* Manuelle Eingabe */}
           <div className="border-t border-gray-700/50 pt-2">

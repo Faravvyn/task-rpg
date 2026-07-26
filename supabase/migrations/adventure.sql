@@ -289,6 +289,23 @@ EXCEPTION
   WHEN undefined_object THEN NULL;
 END $$;
 
+-- Realtime für Challenges & Friendships (Duelle + Freunde sofort ankommen)
+ALTER TABLE challenges REPLICA IDENTITY FULL;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE challenges;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END $$;
+
+ALTER TABLE friendships REPLICA IDENTITY FULL;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE friendships;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END $$;
+
 -- =====================================================================
 -- PostgREST-Schema-Cache neu laden, damit neue Spalten (custom_title,
 -- custom_description) sofort verfügbar sind. Behebt:

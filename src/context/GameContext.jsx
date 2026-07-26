@@ -151,9 +151,23 @@ export function GameProvider({ children }) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_completions', filter: `user_id=eq.${user.id}` }, () => fetchCompletions())
         .subscribe()
 
+      // NEU: Realtime für Challenges – Duelle kommen sofort beim Gegner an
+      const challengesChannel = supabase.channel('challenges_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `opponent_id=eq.${user.id}` }, () => fetchChallenges())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `challenger_id=eq.${user.id}` }, () => fetchChallenges())
+        .subscribe()
+
+      // NEU: Realtime für Friends & Friend-Requests
+      const friendsChannel = supabase.channel('friends_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `receiver_id=eq.${user.id}` }, () => fetchFriends())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `requester_id=eq.${user.id}` }, () => fetchFriends())
+        .subscribe()
+
       return () => {
         supabase.removeChannel(tasksChannel)
         supabase.removeChannel(compsChannel)
+        supabase.removeChannel(challengesChannel)
+        supabase.removeChannel(friendsChannel)
       }
     }
   }, [user, character, fetchTasks, fetchCompletions, fetchLeaderboard, fetchFriends, fetchChallenges])

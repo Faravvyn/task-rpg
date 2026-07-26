@@ -10,6 +10,7 @@
 // =====================================================================
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from './AuthContext'
+import { supabase } from '../lib/supabase'
 import {
   ARTIFACTS, getArtifact, getSetProgress, getCompletedSetBonuses,
   getWeekStartStr, getBossForWeek, getBossLootTier, calculateTaskDamage,
@@ -129,7 +130,38 @@ export function AdventureProvider({ children }) {
 
     function loadLocal() {
       let data = defaultState(weekStart)
-      try { const raw = localStorage.getItem(storageKey(user.id)); if (raw) data = { ...data, ...JSON.parse(raw) } } catch { /* ignore */ }
+      try {
+        const raw = localStorage.getItem(storageKey(user.id))
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          // Inventar NIEMALS auf leer zurücksetzen – nur überschreiben wenn tatsächlich vorhanden
+          if (parsed.inventory && Array.isArray(parsed.inventory)) {
+            data.inventory = parsed.inventory
+          }
+          if (parsed.boss && parsed.boss.weekStart === weekStart) data.boss = parsed.boss
+          if (parsed.arena && parsed.arena.weekStart === weekStart) data.arena = parsed.arena
+          if (parsed.questCompletions && Array.isArray(parsed.questCompletions)) data.questCompletions = parsed.questCompletions
+          if (parsed.loadout && parsed.loadout.weekStart === weekStart) data.loadout = parsed.loadout
+          if (parsed.craftCount != null) data.craftCount = parsed.craftCount
+        } else {
+          // Versuche Backup-Key (ältere Daten wiederherstellen)
+          const backup = localStorage.getItem(storageKey(user.id) + '_backup')
+          if (backup) {
+            const parsed = JSON.parse(backup)
+            if (parsed.inventory && Array.isArray(parsed.inventory)) data.inventory = parsed.inventory
+            if (parsed.boss) data.boss = parsed.boss
+            if (parsed.questCompletions) data.questCompletions = parsed.questCompletions
+          }
+        }
+      } catch { /* ignore – starte mit default aber Inventar aus Backup */ 
+        try {
+          const backup = localStorage.getItem(storageKey(user.id) + '_backup')
+          if (backup) {
+            const parsed = JSON.parse(backup)
+            if (parsed.inventory && Array.isArray(parsed.inventory)) data.inventory = parsed.inventory
+          }
+        } catch {}
+      }
       if (!data.boss || data.boss.weekStart !== weekStart) data.boss = buildFreshBoss()
       if (!data.arena || data.arena.weekStart !== weekStart) data.arena = { weekStart, wins: 0, losses: 0, history: [] }
       if (!Array.isArray(data.questCompletions)) data.questCompletions = []
@@ -143,10 +175,19 @@ export function AdventureProvider({ children }) {
     return () => { cancelled = true }
   }, [user, weekStart])
 
-  // ---------------- SPEICHERN (nur lokal) ----------------
+  // ---------------- SPEICHERN (nur lokal + Backup) ----------------
   useEffect(() => {
     if (REMOTE || !user || !loaded) return
-    try { localStorage.setItem(storageKey(user.id), JSON.stringify(state)) } catch { /* ignore */ }
+    try {
+      const json = JSON.stringify(state)
+      localStorage.setItem(storageKey(user.id), json)
+      // Backup alle 5 Minuten
+      const lastBackup = parseInt(localStorage.getItem(storageKey(user.id) + '_backup_ts') || '0')
+      if (Date.now() - lastBackup > 5 * 60 * 1000) {
+        localStorage.setItem(storageKey(user.id) + '_backup', json)
+        localStorage.setItem(storageKey(user.id) + '_backup_ts', String(Date.now()))
+      }
+    } catch { /* ignore */ }
   }, [state, user, loaded])
 
   // ---------------- Pending-Rewards (nur lokaler Fallback) ----------------
@@ -360,6 +401,37 @@ export function AdventureProvider({ children }) {
     }
   }, [loaded, state.inventory, REMOTE])
 
+  // ---------------- Quest-Cleanup: nur 30 Tage speichern ----------------
+  const questCleanupRef = useRef(0)
+  useEffect(() => {
+    if (!loaded || !user) return
+    const now = Date.now()
+    // Nur einmal pro Stunde prüfen
+    if (now - questCleanupRef.current < 60 * 60 * 1000) return
+    questCleanupRef.current = now
+    
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    const cutoffIso = cutoff.toISOString()
+    
+    const expired = state.questCompletions.filter(c => c.completedAt && c.completedAt < cutoffIso)
+    if (expired.length > 0) {
+      const expiredIds = new Set(expired.map(c => c.instanceId))
+      setState(s => ({
+        ...s,
+        questCompletions: s.questCompletions.filter(c => !expiredIds.has(c.instanceId)),
+      }))
+      if (REMOTE) {
+        expired.forEach(c => {
+          supabase.from('quest_completions').delete()
+            .eq('user_id', user.id)
+            .eq('instance_id', c.instanceId)
+            .then(({ error }) => { if (error) console.warn('Quest cleanup:', error.message) })
+        })
+      }
+    }
+  }, [loaded, user, state.questCompletions, REMOTE])
+  
   // ---------------- Sonderquests ----------------
   const weeklyQuestInstances = useMemo(() => generateWeeklyQuests(weekStart, user?.id || ''), [weekStart, user])
   const completedInstanceIds = useMemo(() => new Set(state.questCompletions.map((c) => c.instanceId)), [state.questCompletions])

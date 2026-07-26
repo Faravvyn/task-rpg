@@ -73,11 +73,20 @@ export default function DashboardPage() {
              </div>
              <button onClick={() => gameDispatch({ type: 'CLEAR_MONSTER_HINT' })} className="text-gray-500 hover:text-white">✕</button>
           </div>
-          {/* Button um manuell den Mini-Boss zu spawnen (Demo-Zwecke) */}
-          <button 
-            onClick={() => spawnMiniBoss()}
-            className="hidden"
-          ></button>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => { gameDispatch({ type: 'CLEAR_MONSTER_HINT' }); spawnMiniBoss('test') }}
+              className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1"
+            >
+              ⚔️ Aufgabe erledigt – Monster rufen!
+            </button>
+            <button
+              onClick={() => gameDispatch({ type: 'CLEAR_MONSTER_HINT' })}
+              className="btn-secondary text-xs py-1.5 px-3"
+            >
+              Später
+            </button>
+          </div>
         </div>
       )}
 

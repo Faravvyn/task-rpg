@@ -709,7 +709,7 @@ export function getConnectedProviders() {
   return ALL_PROVIDERS.filter(p => p.isAvailable() && p.isConnected())
 }
 
-export { ManualProvider }
+export { ManualProvider, ALL_PROVIDERS }
 
 // OAuth-Callback-Handler (wird nach Redirect aufgerufen)
 export async function handleOAuthCallback(searchParams) {
