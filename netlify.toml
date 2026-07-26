@@ -4,6 +4,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Netlify Secrets Scanner: VITE_*-Keys tauchen im Code auf (Vite braucht die Referenz)
+  # → Scan für diese Keys deaktivieren
+  SECRETS_SCAN_OMIT_KEYS = "VITE_GOOGLE_REDIRECT_URI,VITE_GOOGLE_CLIENT_ID,VITE_GOOGLE_CLIENT_SECRET,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
 
 [[redirects]]
   from = "/*"
