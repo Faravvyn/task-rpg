@@ -65,9 +65,9 @@ class GoogleFitProvider {
   // Hilfsfunktion: bereinigt Env-Werte von versehentlichem Markdown-Format
   _cleanEnv(val) {
     if (!val) return ''
-    // Entferne [text](url)-Markdown falls versehentlich kopiert
-    const m = val.match(/^\[.*\]\((.*)\)$/)
-    if (m) return m[1]
+    // Entferne [text](url)-Markdown – der eigentliche Wert steht in den ECKIGEN Klammern
+    const m = val.match(/^\[(.+?)\]\(.*\)$/)
+    if (m) return m[1].trim()
     return val.trim()
   }
 
@@ -80,14 +80,10 @@ class GoogleFitProvider {
   }
 
   get redirectUri() {
-    const raw = this._cleanEnv(import.meta.env.VITE_GOOGLE_REDIRECT_URI || '')
-    if (raw) {
-      // Wenn die URI nicht auf /fitness/callback endet, hänge es an
-      // (Google braucht exakte Übereinstimmung mit dem was in der Console steht)
-      // Wir lassen den User selbst entscheiden – kein automatisches Anhängen
-      return raw
-    }
-    return window.location.origin + '/fitness/callback'
+    // Auto: nutzt window.location.origin – funktioniert lokal UND auf Netlify
+    // Überschreibbar via VITE_GOOGLE_REDIRECT_URI für Sonderfälle
+    const configured = this._cleanEnv(import.meta.env.VITE_GOOGLE_REDIRECT_URI || '')
+    return configured || window.location.origin
   }
 
   isAvailable() {
