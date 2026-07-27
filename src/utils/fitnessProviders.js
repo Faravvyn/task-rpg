@@ -252,17 +252,22 @@ class GoogleFitProvider {
   // Schritt-Daten für einen Zeitraum abrufen
   async getSteps(startDate, endDate) {
     const token = await this._getAccessToken()
-    const startMs = startDate.getTime() * 1000000 // Nanos für Google Fit
-    const endMs = endDate.getTime() * 1000000
+    
+    // Google Fit verwendet NANOSEKUNDEN (nicht Millis!)
+    const startNanos = String(startDate.getTime() * 1000000)
+    const endNanos = String(endDate.getTime() * 1000000)
 
     const body = {
-      aggregateBy: [{
-        dataTypeName: 'com.google.step_count.delta',
-        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps',
-      }],
+      aggregateBy: [
+        // KEIN dataSourceId – aggregiert ALLE verfügbaren Schritt-Quellen
+        // (Android Google Fit, iOS Health Sync, Wear OS, manuelle Einträge…)
+        { dataTypeName: 'com.google.step_count.delta' },
+        // Zusätzlich: Herzfrequenz-Daten für vollständigeres Bild
+        { dataTypeName: 'com.google.step_count.cadence' },
+      ],
       bucketByTime: { durationMillis: 86400000 }, // Tages-Buckets
-      startTimeMillis: startMs,
-      endTimeMillis: endMs,
+      startTimeMillis: startNanos,
+      endTimeMillis: endNanos,
     }
 
     const res = await fetch(
@@ -278,14 +283,20 @@ class GoogleFitProvider {
     )
 
     if (!res.ok) {
+      const errText = await res.text()
+      console.error('[GoogleFit] API-Fehler:', res.status, errText)
       if (res.status === 401) {
         clearTokens(this.id)
-        throw new Error('Google Fit-Session abgelaufen. Bitte erneut verbinden.')
+        throw new Error('Google Fit-Session abgelaufen. Bitte neu verbinden.')
       }
-      throw new Error('Google Fit API-Fehler: ' + res.status)
+      if (res.status === 403) {
+        throw new Error('Keine Berechtigung für Fitness-Daten. Bitte in den Google-Einstellungen prüfen: myaccount.google.com/permissions')
+      }
+      throw new Error(`Google Fit API-Fehler ${res.status}: ${errText.slice(0, 100)}`)
     }
 
     const data = await res.json()
+    console.log('[GoogleFit] Rohdaten:', JSON.stringify(data).slice(0, 500))
     return this._parseSteps(data)
   }
 
@@ -293,13 +304,15 @@ class GoogleFitProvider {
     const dailySteps = []
 
     for (const bucket of data.bucket || []) {
+      // startTimeMillis ist in NANOSEKUNDEN → /1000000 für Millis
       const date = new Date(parseInt(bucket.startTimeMillis) / 1000000)
       let steps = 0
 
       for (const ds of bucket.dataset || []) {
         for (const point of ds.point || []) {
+          // Google Fit kann steps als intVal ODER fpVal speichern
           for (const val of point.value || []) {
-            steps += val.intVal || 0
+            steps += val.intVal || Math.round(val.fpVal) || 0
           }
         }
       }

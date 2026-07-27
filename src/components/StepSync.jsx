@@ -73,7 +73,8 @@ export default function StepSync() {
   const handleSync = async () => {
     if (!character) return
     setSyncing(true)
-    setStatusMsg('')
+    setStatusMsg('⏳ Rufe Schrittdaten ab…')
+    setStatusType('success')
 
     try {
       const today = new Date()
@@ -82,8 +83,16 @@ export default function StepSync() {
 
       const stepsData = await fetchStepsFromAllProviders(lastWeek, today)
 
-      if (stepsData.length === 0) {
-        showStatus('Keine Schrittdaten gefunden. Warst du heute schon aktiv?', 'error')
+      if (!stepsData || stepsData.length === 0) {
+        showStatus(
+          '📱 Keine Schrittdaten gefunden.\n\n' +
+          'Mögliche Ursachen:\n' +
+          '• Google Fit App hat noch keine Daten synchronisiert\n' +
+          '• Keine Schrittzähler-App auf dem Handy aktiv\n' +
+          '• Google Fit App öffnen → Profil → „Daten verwalten“ prüfen\n\n' +
+          'Alternativ: Trag deine Schritte manuell ein ⬇️',
+          'error'
+        )
         setSyncing(false)
         return
       }
@@ -99,14 +108,23 @@ export default function StepSync() {
 
       if (newSteps > 0) {
         await syncSteps(newSteps)
-        showStatus(`✅ ${newSteps.toLocaleString()} neue Schritte synchronisiert!`, 'success')
+        showStatus(
+          `✅ ${newSteps.toLocaleString()} neue Schritte synchronisiert!\n` +
+          `Heute insgesamt: ${todaySteps.toLocaleString()} Schritte`,
+          'success'
+        )
       } else if (todaySteps > 0) {
-        showStatus('✅ Keine neuen Schritte – alles aktuell!', 'success')
+        showStatus(`✅ ${todaySteps.toLocaleString()} Schritte heute – bereits synchronisiert!`, 'success')
       } else {
-        showStatus('Heute noch keine Schritte aufgezeichnet.', 'error')
+        showStatus(
+          `📱 Google Fit meldet: ${stepsData.length} Tage mit Daten, aber heute noch nichts.\n` +
+          'Dein Handy synchronisiert normalerweise alle 15-30 Min mit Google Fit.',
+          'error'
+        )
       }
     } catch (e) {
-      showStatus(`❌ Sync-Fehler: ${e.message}`, 'error')
+      console.error('[StepSync] Fehler:', e)
+      showStatus(`❌ ${e.message}`, 'error')
     }
     setSyncing(false)
   }
