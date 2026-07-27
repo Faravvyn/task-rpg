@@ -71,5 +71,8 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 800
   },
-  server: { port: 5173 }
+  server: { 
+    port: 5173,
+    host: true  // Erlaubt Zugriff von anderen Geräten im Netzwerk (Handy!)
+  }
 })

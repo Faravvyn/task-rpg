@@ -58,7 +58,7 @@ class GoogleFitProvider {
   id = 'google_fit'
   name = 'Google Fit'
   icon = '🏃'
-  description = 'Automatische Synchronisation mit Google Fit. Erfordert ein Google-Konto.'
+  description = 'Synchronisiert mit deinem Google-Konto. Wird von Google bis 2026 supported, danach Umstieg auf Health Connect.'
   color = 'bg-blue-500'
   textColor = 'text-blue-400'
 
@@ -490,68 +490,218 @@ class StravaProvider {
 }
 
 // ---------------------------------------------------------------------
-// HEALTH CONNECT PROVIDER (Android)
+// GOOGLE HEALTH API PROVIDER – Zukunftssicher (ersetzt Fit REST API)
 // ---------------------------------------------------------------------
+// Die Google Health API (developers.google.com/health) ist der offizielle
+// Nachfolger der Google Fit REST API. Gleiche OAuth-Konsole, gleicher
+// Flow, aber zukunftssicher – Google Fit wird Ende 2026 eingestellt.
+//
+// Setup: Gleiche Google Cloud Console wie Fit → APIs & Dienste →
+// „Google Health API" aktivieren → OAuth-Client wiederverwenden.
 
+class GoogleHealthProvider {
+  id = 'google_health'
+  name = 'Google Health'
+  icon = '❤️‍🔥'
+  description = 'Google Health API – offizieller Fit-Nachfolger. Zukunftssicher ab 2026.'
+  color = 'bg-green-500'
+  textColor = 'text-green-400'
+
+  _cleanEnv(val) {
+    if (!val) return ''
+    const m = String(val).match(/^\[(.+?)\]\(.*\)$/)
+    return m ? m[1].trim() : String(val).trim()
+  }
+
+  get clientId() {
+    return this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || '')
+  }
+
+  get clientSecret() {
+    return this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_SECRET || import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '')
+  }
+
+  get redirectUri() {
+    const configured = this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_REDIRECT_URI || import.meta.env.VITE_GOOGLE_REDIRECT_URI || '')
+    return configured || window.location.origin
+  }
+
+  isAvailable() {
+    return true // Immer anzeigen, connect() gibt ggf. Setup-Hinweise
+  }
+
+  isConnected() {
+    const tokens = loadTokens(this.id)
+    return !!(tokens?.access_token)
+  }
+
+  async connect() {
+    if (!this.clientId) {
+      throw new Error(
+        '🔧 Google Health API-Key fehlt.\n\n' +
+        '1. https://console.cloud.google.com\n' +
+        '2. APIs & Dienste → „Google Health API" aktivieren\n' +
+        '3. OAuth-Client-ID erstellen (Webanwendung)\n' +
+        '4. In .env: VITE_GOOGLE_HEALTH_CLIENT_ID=...\n\n' +
+        'Du kannst auch deine vorhandene Fit-Client-ID nutzen!'
+      )
+    }
+
+    const state = generateState()
+    const params = new URLSearchParams({
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      response_type: 'code',
+      scope: [
+        'https://www.googleapis.com/auth/health.activity.read',
+        'https://www.googleapis.com/auth/health.body.read',
+      ].join(' '),
+      access_type: 'offline',
+      prompt: 'consent',
+      state,
+    })
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+
+    return new Promise((resolve, reject) => {
+      const popup = window.open(authUrl, 'google_health_auth', 'width=500,height=700')
+      if (popup) {
+        const interval = setInterval(() => {
+          try {
+            if (popup.closed) { clearInterval(interval); reject(new Error('Anmeldung abgebrochen.')); return }
+            try {
+              if (popup.location.href.startsWith(this.redirectUri)) {
+                const url = new URL(popup.location.href)
+                const code = url.searchParams.get('code')
+                const err = url.searchParams.get('error')
+                popup.close(); clearInterval(interval)
+                if (err) { reject(new Error(`Google-Fehler: ${err}`)); return }
+                if (!code || !validateState(url.searchParams.get('state'))) { reject(new Error('OAuth-Fehler')); return }
+                this._exchangeCode(code).then(resolve).catch(reject)
+              }
+            } catch (e) { /* cross-origin */ }
+          } catch (e) { clearInterval(interval); reject(e) }
+        }, 500)
+        setTimeout(() => { clearInterval(interval); if (!popup.closed) popup.close(); reject(new Error('Timeout (3 Min)')) }, 180000)
+      } else {
+        sessionStorage.setItem('taskrpg_fitness_pending', 'google_health')
+        window.location.href = authUrl
+      }
+    })
+  }
+
+  async handleCallback(code, state) {
+    if (!validateState(state)) throw new Error('Ungültiger OAuth-State.')
+    await this._exchangeCode(code)
+  }
+
+  async _exchangeCode(code) {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ code, client_id: this.clientId, client_secret: this.clientSecret, redirect_uri: this.redirectUri, grant_type: 'authorization_code' }),
+    })
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error_description || 'Token-Fehler') }
+    const tokens = await res.json()
+    tokens.obtained_at = Date.now()
+    saveTokens(this.id, tokens)
+    return tokens
+  }
+
+  async _refreshToken() {
+    const tokens = loadTokens(this.id)
+    if (!tokens?.refresh_token) throw new Error('Bitte erneut verbinden.')
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: this.clientId, client_secret: this.clientSecret, refresh_token: tokens.refresh_token, grant_type: 'refresh_token' }),
+    })
+    if (!res.ok) { clearTokens(this.id); throw new Error('Session abgelaufen. Bitte neu verbinden.') }
+    const newTokens = await res.json()
+    newTokens.refresh_token = tokens.refresh_token
+    newTokens.obtained_at = Date.now()
+    saveTokens(this.id, newTokens)
+    return newTokens
+  }
+
+  async _getAccessToken() {
+    const tokens = loadTokens(this.id)
+    if (!tokens) throw new Error('Nicht verbunden.')
+    if (Date.now() - tokens.obtained_at > 3500 * 1000) return (await this._refreshToken()).access_token
+    return tokens.access_token
+  }
+
+  disconnect() { clearTokens(this.id) }
+
+  async getSteps(startDate, endDate) {
+    const token = await this._getAccessToken()
+    const startNanos = String(startDate.getTime() * 1000000)
+    const endNanos = String(endDate.getTime() * 1000000)
+
+    // Google Health API: Steps-Datentyp
+    const body = {
+      aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
+      bucketByTime: { durationMillis: 86400000 },
+      startTimeMillis: startNanos,
+      endTimeMillis: endNanos,
+    }
+
+    // Versuche zuerst neue Health API, fallback zu Fit API
+    let res = await fetch('https://health.googleapis.com/v1/users/me/dataset:aggregate', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    // Fallback: klassische Fitness API (gleicher Token funktioniert)
+    if (!res.ok) {
+      console.warn('[GoogleHealth] Neue API nicht erreichbar, versuche Fit-API-Fallback')
+      res = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    }
+
+    if (!res.ok) {
+      const errText = await res.text()
+      if (res.status === 401) { clearTokens(this.id); throw new Error('Session abgelaufen.') }
+      throw new Error(`API-Fehler ${res.status}: ${errText.slice(0, 150)}`)
+    }
+
+    const data = await res.json()
+    const dailySteps = []
+    for (const bucket of data.bucket || []) {
+      const date = new Date(parseInt(bucket.startTimeMillis) / 1000000)
+      let steps = 0
+      for (const ds of bucket.dataset || []) {
+        for (const point of ds.point || []) {
+          for (const val of point.value || []) {
+            steps += val.intVal || Math.round(val.fpVal) || 0
+          }
+        }
+      }
+      dailySteps.push({ date: date.toISOString().split('T')[0], steps, provider: 'google_health' })
+    }
+    return dailySteps
+  }
+}
+
+// ---------------------------------------------------------------------
+// HEALTH CONNECT (Android, offline – nur Info)
+// ---------------------------------------------------------------------
 class HealthConnectProvider {
   id = 'health_connect'
   name = 'Health Connect'
   icon = '❤️'
-  description = 'Android Health Connect (Android 14+). Direkte, lokale Synchronisation.'
+  description = 'Android Health Connect. Nur lokal auf dem Gerät – keine Web-API.'
   color = 'bg-green-500'
   textColor = 'text-green-400'
-
-  isAvailable() {
-    // Nur auf Android-Chrome mit Health-Connect-Unterstützung
-    return typeof navigator !== 'undefined' && 'health' in navigator
-  }
-
-  isConnected() {
-    return localStorage.getItem('taskrpg_health_connect_granted') === '1'
-  }
-
-  async connect() {
-    if (!this.isAvailable()) {
-      throw new Error(
-        'Health Connect ist nur auf Android 14+ mit Chrome verfügbar.\n\n' +
-        'Alternativen:\n' +
-        '• Google Fit – funktioniert auf allen Geräten\n' +
-        '• Manuelle Eingabe – immer verfügbar'
-      )
-    }
-
-    try {
-      // Health Connect Web API (experimentell)
-      const permission = await navigator.permissions.query({ name: 'health-connect' })
-
-      if (permission.state === 'granted') {
-        localStorage.setItem('taskrpg_health_connect_granted', '1')
-        return true
-      }
-
-      throw new Error(
-        'Health-Connect-Berechtigung wurde verweigert.\n\n' +
-        'Bitte erlaube den Zugriff in den Android-Einstellungen unter:\n' +
-        'Einstellungen → Apps → Chrome → Health Connect'
-      )
-    } catch (e) {
-      if (e.message.includes('Berechtigung')) throw e
-      throw new Error('Health Connect ist auf diesem Gerät nicht verfügbar.')
-    }
-  }
-
-  disconnect() {
-    localStorage.removeItem('taskrpg_health_connect_granted')
-  }
-
-  async getSteps(startDate, endDate) {
-    // Health Connect Web API ist noch in Entwicklung.
-    // Für jetzt: Fallback zu manueller Eingabe mit Hinweis.
-    throw new Error(
-      'Health Connect Web API wird noch nicht vollständig unterstützt.\n' +
-      'Bitte nutze Google Fit oder manuelle Eingabe.'
-    )
-  }
+  isAvailable() { return false }
+  isConnected() { return false }
+  connect() { throw new Error('Health Connect ist nur für native Android-Apps.') }
+  disconnect() {}
+  async getSteps() { return [] }
 }
 
 // ---------------------------------------------------------------------
@@ -716,6 +866,7 @@ class FitbitProvider {
 
 const ALL_PROVIDERS = [
   new GoogleFitProvider(),
+  new GoogleHealthProvider(),
   new StravaProvider(),
   new HealthConnectProvider(),
   new FitbitProvider(),

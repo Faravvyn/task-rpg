@@ -73,10 +73,14 @@ export default function StepSync() {
   const handleSync = async () => {
     if (!character) return
     setSyncing(true)
-    setStatusMsg('⏳ Rufe Schrittdaten ab…')
+    setStatusMsg('⏳ Rufe Schrittdaten von Google Fit ab...')
     setStatusType('success')
 
     try {
+      // Quick-Test: Zeig ob Token vorhanden ist
+      const tokens = localStorage.getItem('taskrpg_fitness_google_fit')
+      const hasToken = !!tokens
+      
       const today = new Date()
       const lastWeek = new Date(today)
       lastWeek.setDate(lastWeek.getDate() - 7)
@@ -85,45 +89,35 @@ export default function StepSync() {
 
       if (!stepsData || stepsData.length === 0) {
         showStatus(
-          '📱 Keine Schrittdaten gefunden.\n\n' +
-          'Mögliche Ursachen:\n' +
-          '• Google Fit App hat noch keine Daten synchronisiert\n' +
-          '• Keine Schrittzähler-App auf dem Handy aktiv\n' +
-          '• Google Fit App öffnen → Profil → „Daten verwalten“ prüfen\n\n' +
-          'Alternativ: Trag deine Schritte manuell ein ⬇️',
+          `📱 Google Fit verbunden ${hasToken ? '✅' : '❌'} – aber keine Schrittdaten.\n\n` +
+          'Das ist normal wenn du vom PC testest!\n\n' +
+          '👉 Teste auf deinem Android-Handy:\n' +
+          '1. Öffne die Google Fit App\n' +
+          '2. Warte bis Schritte angezeigt werden\n' +
+          '3. Öffne dann TaskRPG auf dem Handy\n' +
+          '4. Klick „Jetzt syncen"\n\n' +
+          '📶 Dev-Server: npm run dev → Vite zeigt IP für Handy-Zugriff an',
           'error'
         )
         setSyncing(false)
         return
       }
 
-      // Nur heutige Schritte zum Sync
       const todayStr = today.toISOString().split('T')[0]
       const todayEntry = stepsData.find(d => d.date === todayStr)
       const todaySteps = todayEntry?.steps || 0
-
-      // Neue Schritte = heutige Schritte - bereits synchronisierte
       const alreadySynced = character.daily_steps || 0
       const newSteps = Math.max(0, todaySteps - alreadySynced)
 
       if (newSteps > 0) {
         await syncSteps(newSteps)
-        showStatus(
-          `✅ ${newSteps.toLocaleString()} neue Schritte synchronisiert!\n` +
-          `Heute insgesamt: ${todaySteps.toLocaleString()} Schritte`,
-          'success'
-        )
+        showStatus(`✅ ${newSteps.toLocaleString()} neue Schritte! Heute: ${todaySteps.toLocaleString()}`, 'success')
       } else if (todaySteps > 0) {
         showStatus(`✅ ${todaySteps.toLocaleString()} Schritte heute – bereits synchronisiert!`, 'success')
       } else {
-        showStatus(
-          `📱 Google Fit meldet: ${stepsData.length} Tage mit Daten, aber heute noch nichts.\n` +
-          'Dein Handy synchronisiert normalerweise alle 15-30 Min mit Google Fit.',
-          'error'
-        )
+        showStatus('Heute noch keine Schritte – lauf ein bisschen! 🚶', 'error')
       }
     } catch (e) {
-      console.error('[StepSync] Fehler:', e)
       showStatus(`❌ ${e.message}`, 'error')
     }
     setSyncing(false)
