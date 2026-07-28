@@ -27,7 +27,11 @@ export async function handler(event) {
 
     const clientId = process.env.VITE_GOOGLE_CLIENT_ID
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-    const redirectUri = process.env.VITE_GOOGLE_REDIRECT_URI || process.env.URL || ''
+    const redirectUri = (() => {
+      const raw = process.env.VITE_GOOGLE_REDIRECT_URI || process.env.URL || ''
+      // Stelle sicher dass /auth/google/callback immer dranhängt
+      return raw.endsWith('/auth/google/callback') ? raw : raw + '/auth/google/callback'
+    })()
 
     console.log('[google-token] Env-Check:', {
       hasClientId: !!clientId,

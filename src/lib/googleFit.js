@@ -8,10 +8,11 @@ const isNetlify = () =>
   (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('netlify.com'))
 
 const REDIRECT_URI = (() => {
-  if (isNetlify()) {
-    return (import.meta.env.VITE_GOOGLE_REDIRECT_URI || window.location.origin) + '/auth/google/callback'
-  }
-  // Lokal: immer localhost + Callback-Pfad
+  // Explizit gesetzte URI aus .env / Netlify – bereits vollständig, nicht verändern!
+  const configured = import.meta.env.VITE_GOOGLE_REDIRECT_URI || ''
+  if (configured) return configured
+  
+  // Fallback: auto aus window.location bauen
   return window.location.origin + '/auth/google/callback'
 })()
 

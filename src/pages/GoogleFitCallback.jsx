@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { exchangeCodeForTokens, saveTokensToSupabase } from '../lib/googleFit'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -6,8 +6,9 @@ import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 export default function GoogleFitCallback() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const [status, setStatus] = useState('connecting') // connecting | success | error
+  const [status, setStatus] = useState('connecting')
   const [errorMsg, setErrorMsg] = useState('')
+  const exchangedRef = useRef(false)
 
   useEffect(() => {
     const code = params.get('code')
@@ -25,6 +26,10 @@ export default function GoogleFitCallback() {
       return
     }
 
+    // Verhindere Doppel-Exchange durch React StrictMode (Dev)
+    if (exchangedRef.current) return
+    exchangedRef.current = true
+
     exchangeCodeForTokens(code)
       .then(async (tokens) => {
         await saveTokensToSupabase(
@@ -36,6 +41,7 @@ export default function GoogleFitCallback() {
         setTimeout(() => navigate('/dashboard'), 1500)
       })
       .catch(e => {
+        console.error('Google Fit Callback Error:', e)
         setStatus('error')
         setErrorMsg(e.message)
       })
