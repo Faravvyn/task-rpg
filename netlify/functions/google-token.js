@@ -29,6 +29,13 @@ export async function handler(event) {
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET
     const redirectUri = process.env.VITE_GOOGLE_REDIRECT_URI || process.env.URL || ''
 
+    console.log('[google-token] Env-Check:', {
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+      redirectUri,
+      siteUrl: process.env.URL,
+    })
+
     if (!clientId || !clientSecret) {
       return {
         statusCode: 500,
@@ -53,6 +60,10 @@ export async function handler(event) {
       params.append('redirect_uri', redirectUri)
       params.append('grant_type', 'authorization_code')
     }
+
+    console.log("DEBUG client_id:", clientId)
+    console.log("DEBUG redirect_uri:", redirectUri)
+    console.log("DEBUG has_secret:", !!clientSecret)
 
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
