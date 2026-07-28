@@ -1,12 +1,18 @@
 [build]
   command = "npm install --legacy-peer-deps && npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "20"
-  # Netlify Secrets Scanner: VITE_*-Keys tauchen im Code auf (Vite braucht die Referenz)
-  # → Scan für diese Keys deaktivieren
-  SECRETS_SCAN_OMIT_KEYS = "VITE_GOOGLE_REDIRECT_URI,VITE_GOOGLE_CLIENT_ID,VITE_GOOGLE_CLIENT_SECRET,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+  # Nur VITE_-Variablen werden ins Frontend gebundled
+  # GOOGLE_CLIENT_SECRET (ohne VITE_) bleibt nur serverseitig
+  SECRETS_SCAN_OMIT_KEYS = "VITE_GOOGLE_REDIRECT_URI,VITE_GOOGLE_CLIENT_ID,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
 [[redirects]]
   from = "/*"

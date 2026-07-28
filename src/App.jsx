@@ -28,6 +28,7 @@ const LoadoutPage = lazy(() => import('./pages/LoadoutPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const MonsterPage = lazy(() => import('./pages/MonsterPage'))
 const RPGPage = lazy(() => import('./pages/RPGPage'))
+const GoogleFitCallback = lazy(() => import('./pages/GoogleFitCallback'))
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="monsters" element={<MonsterPage />} />
         </Route>
         <Route path="/invite/:username" element={<InviteRedirect />} />
+        <Route path="/auth/google/callback" element={<GoogleFitCallback />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>

@@ -96,82 +96,25 @@ class GoogleFitProvider {
     return !!(tokens?.access_token)
   }
 
-  // OAuth-Flow starten – öffnet Google-Login in einem Popup oder Redirect
+  // OAuth-Flow – sicherer Redirect via Netlify Function (client_secret nie im Frontend!)
+  // Lokal: VITE_GOOGLE_CLIENT_SECRET in .env, Produktion: Netlify-Function
   async connect() {
-    if (!this.clientId) {
+    if (!(import.meta.env.VITE_GOOGLE_CLIENT_ID || '')) {
       throw new Error(
         '🔧 Google Fit API-Key fehlt.\n\n' +
         'Trage in deine .env-Datei ein:\n' +
         'VITE_GOOGLE_CLIENT_ID=deine-client-id.apps.googleusercontent.com\n' +
-        'VITE_GOOGLE_CLIENT_SECRET=GOCSPX-dein-secret\n' +
-        'VITE_GOOGLE_REDIRECT_URI=https://task-rpg.netlify.app\n\n' +
-        'Danach: npm run dev NEU STARTEN!\n' +
-        'Auf Netlify: Env-Vars im Dashboard unter Site Settings → Environment setzen.'
+        'VITE_GOOGLE_CLIENT_SECRET=GOCSPX-dein-secret\n\n' +
+        'Danach: npm run dev NEU STARTEN!'
       )
     }
 
-    const state = generateState()
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      redirect_uri: this.redirectUri,
-      response_type: 'code',
-      scope: GOOGLE_FIT_SCOPES.join(' '),
-      access_type: 'offline',
-      prompt: 'consent',
-      state,
-    })
-
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
-
-    // Popup (bessere UX), Fallback zu Redirect
-    return new Promise((resolve, reject) => {
-      const popup = window.open(authUrl, 'google_fit_auth', 'width=500,height=700')
-
-      if (popup) {
-        const interval = setInterval(() => {
-          try {
-            if (popup.closed) {
-              clearInterval(interval)
-              reject(new Error('Anmeldung abgebrochen – Fenster wurde geschlossen.'))
-              return
-            }
-            try {
-              if (popup.location.href.startsWith(this.redirectUri)) {
-                const url = new URL(popup.location.href)
-                const code = url.searchParams.get('code')
-                const returnedState = url.searchParams.get('state')
-                const errorParam = url.searchParams.get('error')
-                popup.close()
-                clearInterval(interval)
-
-                if (errorParam) {
-                  reject(new Error(`Google-Fehler: ${errorParam}. Prüfe ob die Redirect-URI in der Google Cloud Console exakt eingetragen ist.`))
-                  return
-                }
-                if (!code || !validateState(returnedState)) {
-                  reject(new Error('OAuth-Fehler: Ungültige Antwort von Google.'))
-                  return
-                }
-                this._exchangeCode(code).then(resolve).catch(reject)
-              }
-            } catch (e) { /* cross-origin – ignorieren */ }
-          } catch (e) {
-            clearInterval(interval)
-            reject(e)
-          }
-        }, 500)
-
-        setTimeout(() => {
-          clearInterval(interval)
-          if (!popup.closed) popup.close()
-          reject(new Error('Zeitüberschreitung (3 Min). Bitte versuche es erneut.'))
-        }, 180000)
-      } else {
-        // Popup blockiert → Redirect
-        sessionStorage.setItem('taskrpg_fitness_pending', 'google_fit')
-        window.location.href = authUrl
-      }
-    })
+    // Dynamischer Import – kein Circular-Dependency-Risiko
+    const { startGoogleFitLogin } = await import('../lib/googleFit')
+    startGoogleFitLogin()
+    // Wird nie resolven – User wird zu Google weitergeleitet
+    // Nach dem Callback kommt er auf /auth/google/callback zurück
+    return new Promise(() => {})
   }
 
   // OAuth Callback verarbeiten (vom Redirect zurück)
@@ -181,25 +124,13 @@ class GoogleFitProvider {
   }
 
   async _exchangeCode(code) {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        redirect_uri: this.redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    })
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.error_description || err.error || 'Token-Austausch fehlgeschlagen.')
-    }
-
-    const tokens = await res.json()
+    // Nutzt den sicheren Exchange (lokal direkt, auf Netlify via Function)
+    const { exchangeCodeForTokens, saveTokensToSupabase } = await import('../lib/googleFit')
+    const tokens = await exchangeCodeForTokens(code)
     tokens.obtained_at = Date.now()
+    // In Supabase speichern für Cross-Device + localStorage-Fallback
+    await saveTokensToSupabase(tokens.access_token, tokens.refresh_token, tokens.expires_in || 3600)
+    // Auch lokal für isConnected()-Check
     saveTokens(this.id, tokens)
     return tokens
   }
@@ -208,24 +139,9 @@ class GoogleFitProvider {
     const tokens = loadTokens(this.id)
     if (!tokens?.refresh_token) throw new Error('Kein Refresh Token. Bitte erneut verbinden.')
 
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        refresh_token: tokens.refresh_token,
-        grant_type: 'refresh_token',
-      }),
-    })
-
-    if (!res.ok) {
-      clearTokens(this.id)
-      throw new Error('Session abgelaufen. Bitte erneut mit Google Fit verbinden.')
-    }
-
-    const newTokens = await res.json()
-    newTokens.refresh_token = tokens.refresh_token // Google sendet das nur beim ersten Mal
+    const { refreshAccessToken } = await import('../lib/googleFit')
+    const newTokens = await refreshAccessToken(tokens.refresh_token)
+    newTokens.refresh_token = tokens.refresh_token
     newTokens.obtained_at = Date.now()
     saveTokens(this.id, newTokens)
     return newTokens
