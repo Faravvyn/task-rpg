@@ -8,6 +8,12 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "functions": {
+    "esbuild": {
+      "target": "es2020",
+      "format": "esm"
+    }
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "canvas-confetti": "^1.9.2",

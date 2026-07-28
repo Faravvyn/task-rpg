@@ -1,6 +1,6 @@
 // Netlify Serverless Function – sicherer Token-Exchange für Google OAuth
 // client_secret NIE im Frontend, nur hier serverseitig verfügbar.
-exports.handler = async function (event) {
+export async function handler(event) {
   const origin = event.headers.origin || event.headers.referer || ''
   const allowedOrigins = [
     process.env.URL || '',
