@@ -168,22 +168,16 @@ class GoogleFitProvider {
   // Schritt-Daten für einen Zeitraum abrufen
   async getSteps(startDate, endDate) {
     const token = await this._getAccessToken()
-    
-    // Google Fit verwendet NANOSEKUNDEN (nicht Millis!)
-    const startNanos = String(startDate.getTime() * 1000000)
-    const endNanos = String(endDate.getTime() * 1000000)
 
+    // Google Fit dataset:aggregate erwartet MILLISEKUNDEN (nicht Nanos!)
     const body = {
       aggregateBy: [
-        // KEIN dataSourceId – aggregiert ALLE verfügbaren Schritt-Quellen
-        // (Android Google Fit, iOS Health Sync, Wear OS, manuelle Einträge…)
         { dataTypeName: 'com.google.step_count.delta' },
-        // Zusätzlich: Herzfrequenz-Daten für vollständigeres Bild
         { dataTypeName: 'com.google.step_count.cadence' },
       ],
-      bucketByTime: { durationMillis: 86400000 }, // Tages-Buckets
-      startTimeMillis: startNanos,
-      endTimeMillis: endNanos,
+      bucketByTime: { durationMillis: 86400000 },
+      startTimeMillis: startDate.getTime(),
+      endTimeMillis: endDate.getTime(),
     }
 
     const res = await fetch(
@@ -220,8 +214,8 @@ class GoogleFitProvider {
     const dailySteps = []
 
     for (const bucket of data.bucket || []) {
-      // startTimeMillis ist in NANOSEKUNDEN → /1000000 für Millis
-      const date = new Date(parseInt(bucket.startTimeMillis) / 1000000)
+      // startTimeMillis kommt bereits in korrekten Millisekunden
+      const date = new Date(parseInt(bucket.startTimeMillis))
       let steps = 0
 
       for (const ds of bucket.dataset || []) {
@@ -551,15 +545,12 @@ class GoogleHealthProvider {
 
   async getSteps(startDate, endDate) {
     const token = await this._getAccessToken()
-    const startNanos = String(startDate.getTime() * 1000000)
-    const endNanos = String(endDate.getTime() * 1000000)
-
-    // Google Health API: Steps-Datentyp
+    // Google Health API: Steps-Datentyp (Millisekunden!)
     const body = {
       aggregateBy: [{ dataTypeName: 'com.google.step_count.delta' }],
       bucketByTime: { durationMillis: 86400000 },
-      startTimeMillis: startNanos,
-      endTimeMillis: endNanos,
+      startTimeMillis: startDate.getTime(),
+      endTimeMillis: endDate.getTime(),
     }
 
     // Versuche zuerst neue Health API, fallback zu Fit API
@@ -588,7 +579,7 @@ class GoogleHealthProvider {
     const data = await res.json()
     const dailySteps = []
     for (const bucket of data.bucket || []) {
-      const date = new Date(parseInt(bucket.startTimeMillis) / 1000000)
+      const date = new Date(parseInt(bucket.startTimeMillis))
       let steps = 0
       for (const ds of bucket.dataset || []) {
         for (const point of ds.point || []) {
