@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { exchangeCodeForTokens, saveTokensToSupabase } from '../lib/googleFit'
+import { getProvider } from '../utils/fitnessProviders'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function GoogleFitCallback() {
@@ -26,17 +26,21 @@ export default function GoogleFitCallback() {
       return
     }
 
-    // Verhindere Doppel-Exchange durch React StrictMode (Dev)
     if (exchangedRef.current) return
     exchangedRef.current = true
 
-    exchangeCodeForTokens(code)
-      .then(async (tokens) => {
-        await saveTokensToSupabase(
-          tokens.access_token,
-          tokens.refresh_token,
-          tokens.expires_in || 3600
-        )
+    // Nutzt den Provider-internen Exchange – speichert sowohl in
+    // Supabase (cross-device) als auch in localStorage (taskrpg_fitness_google_fit)
+    // → isConnected() in StepSync/FitnessProvider erkennt die Verbindung sofort
+    const provider = getProvider('google_fit')
+    if (!provider || !provider._exchangeCode) {
+      setStatus('error')
+      setErrorMsg('Provider nicht gefunden.')
+      return
+    }
+
+    provider._exchangeCode(code)
+      .then(() => {
         setStatus('success')
         setTimeout(() => navigate('/dashboard'), 1500)
       })
