@@ -173,7 +173,6 @@ class GoogleFitProvider {
     const body = {
       aggregateBy: [
         { dataTypeName: 'com.google.step_count.delta' },
-        { dataTypeName: 'com.google.step_count.cadence' },
       ],
       bucketByTime: { durationMillis: 86400000 },
       startTimeMillis: startDate.getTime(),
