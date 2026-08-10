@@ -186,7 +186,8 @@ CREATE INDEX IF NOT EXISTS idx_loadout_user ON user_loadout(user_id, week_start)
 -- ---------------------------------------------------------------------
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS total_steps INTEGER DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS weekly_steps INTEGER DEFAULT 0;
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS daily_steps INTEGER DEFAULT 0; -- Neue Spalte für Tages-Tasks
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS daily_steps INTEGER DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS monthly_steps INTEGER DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_step_sync TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS tutorial_done BOOLEAN DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS steps_reward_claimed BOOLEAN DEFAULT false;

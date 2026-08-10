@@ -107,9 +107,12 @@ export async function refreshAccessToken(refreshToken) {
   return res.json()
 }
 
-// 4. Schritte der letzten Tage abrufen
+// 4. Schritte der letzten Tage abrufen (Midnight-aligned für korrekte Buckets)
 export async function getSteps(accessToken, daysBack = 7) {
-  const endMs = Date.now()
+  const now = new Date()
+  // Endzeit = morgen Mitternacht (UTC Mitternacht für Google Fit)
+  const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime()
+  // Start = (daysBack+1) Tage vor Endzeit → deckt daysBack volle Kalendertage ab
   const startMs = endMs - daysBack * 24 * 60 * 60 * 1000
 
   const res = await fetch(

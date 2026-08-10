@@ -369,25 +369,41 @@ export function AdventureProvider({ children }) {
     return { artifact: art, tier, percent }
   }, [state.boss, user, weekStart, REMOTE])
 
-  // Bereinige abgelaufene Items & Schritte-Reset nur bei Load-Änderung
-  const inventoryCleanupRef = useRef(null)
+  // ---------------- Schritte-Wochen/Monats-Reset (Montag 00:00) ----------------
+  const stepsCleanupRef = useRef(0)
   useEffect(() => {
     if (!loaded || !character) return
-    const lastSync = character?.last_step_sync ? new Date(character.last_step_sync) : new Date(0)
+    const now = Date.now()
+    if (now - stepsCleanupRef.current < 60 * 1000) return
+    stepsCleanupRef.current = now
+    
     const nowDate = new Date()
-    const diff = (nowDate - lastSync) / (1000 * 60 * 60 * 24)
+    const lastSync = character?.last_step_sync ? new Date(character.last_step_sync) : new Date(0)
     const updates = {}
-    if (diff >= 7) {
+    
+    // Wochen-Reset: Prüfe ob Montag der letzten Sync < Montag der aktuellen Woche
+    const getMonday = (d) => { const m = new Date(d); m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); m.setHours(0,0,0,0); return m }
+    if (getMonday(lastSync) < getMonday(nowDate)) {
       updates.weekly_steps = 0
       updates.steps_reward_claimed = false
     }
+    
+    // Tages-Reset: anderes Datum
     if (lastSync.toDateString() !== nowDate.toDateString()) {
       updates.daily_steps = 0
     }
+
+    // Monats-Reset (neues Feld)
+    const lastMonth = lastSync.getMonth() + lastSync.getFullYear() * 12
+    const nowMonth = nowDate.getMonth() + nowDate.getFullYear() * 12
+    if (lastMonth < nowMonth) {
+      updates.monthly_steps = 0
+    }
+
     if (Object.keys(updates).length > 0) {
       updateCharacter(updates)
     }
-  }, [loaded, character?.last_step_sync, character?.weekly_steps])
+  }, [loaded, character?.last_step_sync, character?.weekly_steps, updateCharacter])
 
   // Abgelaufene Items separat behandeln (nur bei Inventory-Änderungen)
   useEffect(() => {
@@ -694,28 +710,36 @@ export function AdventureProvider({ children }) {
   }, [])
 
   // ---------------- Monster Affection / Decay ----------------
+  const monstersRef = useRef(userMonsters)
+  useEffect(() => { monstersRef.current = userMonsters }, [userMonsters])
+  
   useEffect(() => {
-    if (!loaded || !userMonsters.length) return
+    if (!loaded) return
     const interval = setInterval(() => {
-      setUserMonsters(prev => {
-        let changed = false
-        const next = prev.map(m => {
-          if ((m.affection || 100) > 0) {
-            changed = true
-            const newAff = Math.max(0, (m.affection || 100) - 1)
-            // Fire-and-forget Persistenz – nicht im setState blocken
-            if (REMOTE) {
-              setTimeout(() => updateMonster(m.id, { affection: newAff }), 0)
-            }
-            return { ...m, affection: newAff }
+      const current = monstersRef.current
+      if (!current.length) return
+      
+      let changed = false
+      const next = current.map(m => {
+        const aff = m.affection ?? 100
+        if (aff > 0) {
+          changed = true
+          const newAff = Math.max(0, aff - 1)
+          if (REMOTE) {
+            try { updateMonster(m.id, { affection: newAff }) } catch {}
           }
-          return m
-        })
-        return changed ? next : prev
+          return { ...m, affection: newAff }
+        }
+        return m
       })
+      
+      if (changed) {
+        setUserMonsters(next)
+      }
     }, 1000 * 60 * 60) // -1 Affection pro Stunde
+    
     return () => clearInterval(interval)
-  }, [loaded, userMonsters, REMOTE])
+  }, [loaded, REMOTE])
 
   const interactWithMonster = useCallback(async (monsterUid, type = 'pet') => {
     const m = userMonsters.find(it => it.id === monsterUid)
@@ -759,20 +783,25 @@ export function AdventureProvider({ children }) {
     if (steps >= 80000) rarity = 'legendary'
     else if (steps >= 60000) rarity = 'epic'
     else if (steps >= 50000) rarity = 'rare'
+    else if (steps >= 25000) rarity = 'common'
     else return
 
-    await addArtifact(rollArtifact(rarity).id, 'quest')
+    const art = rollArtifact(rarity)
+    await addArtifact(art.id, 'quest')
     await updateCharacter({ steps_reward_claimed: true })
+    return art
   }
 
   async function syncSteps(steps) {
     if (!user) return
     const newWeekly = (character.weekly_steps || 0) + steps
     const newDaily = (character.daily_steps || 0) + steps
+    const newMonthly = (character.monthly_steps || 0) + steps
     await updateCharacter({ 
       total_steps: (character.total_steps || 0) + steps,
       weekly_steps: newWeekly,
       daily_steps: newDaily,
+      monthly_steps: newMonthly,
       last_step_sync: new Date().toISOString()
     })
   }
