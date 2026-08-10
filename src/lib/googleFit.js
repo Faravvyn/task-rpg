@@ -138,7 +138,8 @@ export async function getSteps(accessToken, daysBack = 7) {
   const dailySteps = []
 
   for (const bucket of data.bucket || []) {
-    const date = new Date(parseInt(bucket.startTimeMillis)).toISOString().split('T')[0]
+    const d = new Date(parseInt(bucket.startTimeMillis))
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     let steps = 0
     for (const ds of bucket.dataset || []) {
       for (const point of ds.point || []) {

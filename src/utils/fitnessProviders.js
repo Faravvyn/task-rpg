@@ -9,6 +9,12 @@
 // Der FitnessManager orchestriert mehrere Provider und merged deren Daten.
 // =====================================================================
 
+// ---- Hilfsfunktion: lokales Datums-Label (nicht UTC!) ----
+export function toLocalDateStr(msOrDate) {
+  const d = msOrDate instanceof Date ? msOrDate : new Date(Number(msOrDate))
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // ---------------------------------------------------------------------
 // OAuth-Helfer
 // ---------------------------------------------------------------------
@@ -227,7 +233,7 @@ class GoogleFitProvider {
       }
 
       dailySteps.push({
-        date: date.toISOString().split('T')[0],
+        date: toLocalDateStr(parseInt(bucket.startTimeMillis)),
         steps,
         provider: 'google_fit',
       })
@@ -587,7 +593,7 @@ class GoogleHealthProvider {
           }
         }
       }
-      dailySteps.push({ date: date.toISOString().split('T')[0], steps, provider: 'google_health' })
+      dailySteps.push({ date: toLocalDateStr(parseInt(bucket.startTimeMillis)), steps, provider: 'google_health' })
     }
     return dailySteps
   }
@@ -634,7 +640,7 @@ class ManualProvider {
       const result = []
       const d = new Date(startDate)
       while (d <= endDate) {
-        const key = d.toISOString().split('T')[0]
+        const key = toLocalDateStr(d.getTime())
         if (manual[key]) {
           result.push({ date: key, steps: manual[key], provider: 'manual' })
         }
@@ -646,7 +652,7 @@ class ManualProvider {
 
   // Manuelle Schritte für heute speichern
   static setTodaySteps(steps) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = toLocalDateStr(Date.now())
     const manual = JSON.parse(localStorage.getItem('taskrpg_manual_steps') || '{}')
     manual[today] = steps
     localStorage.setItem('taskrpg_manual_steps', JSON.stringify(manual))
@@ -655,7 +661,7 @@ class ManualProvider {
   static getTodaySteps() {
     try {
       const manual = JSON.parse(localStorage.getItem('taskrpg_manual_steps') || '{}')
-      const today = new Date().toISOString().split('T')[0]
+      const today = toLocalDateStr(Date.now())
       return manual[today] || 0
     } catch { return 0 }
   }
@@ -836,17 +842,12 @@ export async function handleOAuthCallback(searchParams) {
 
 // Schritte von allen verbundenen Providern für einen Zeitraum holen
 export async function fetchStepsFromAllProviders(startDate, endDate) {
-  const connected = getConnectedProviders()
-    .filter(p => p.id !== 'manual') // Manuelle separat
-
-  if (connected.length === 0) {
-    // Nur manuelle Daten
-    const manual = new ManualProvider()
-    return await manual.getSteps(startDate, endDate)
-  }
+  const connected = getConnectedProviders().filter(p => p.id !== 'manual')
+  const manual = new ManualProvider()
+  const allProviders = [...connected, manual]
 
   const results = await Promise.allSettled(
-    connected.map(p => p.getSteps(startDate, endDate).catch(e => {
+    allProviders.map(p => p.getSteps(startDate, endDate).catch(e => {
       console.warn(`[Fitness] ${p.name}:`, e.message)
       return []
     }))

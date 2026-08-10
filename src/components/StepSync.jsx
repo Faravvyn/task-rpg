@@ -7,6 +7,7 @@ import { useAdventure } from '../context/AdventureContext'
 import {
   getConnectedProviders, getProvider,
   fetchStepsFromAllProviders, ManualProvider, ALL_PROVIDERS,
+  toLocalDateStr,
 } from '../utils/fitnessProviders'
 import {
   Footprints, Link2, Link2Off, RefreshCw, CheckCircle2,
@@ -102,7 +103,7 @@ export default function StepSync() {
         return
       }
 
-      const todayStr = today.toISOString().split('T')[0]
+      const todayStr = toLocalDateStr(today.getTime())
       const todayEntry = stepsData.find(d => d.date === todayStr)
       const todaySteps = todayEntry?.steps || 0
       const alreadySynced = character.daily_steps || 0
