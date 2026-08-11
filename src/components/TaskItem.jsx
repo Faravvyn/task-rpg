@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Check, Trash2, Edit3, ChevronDown, ChevronUp, RotateCcw, Clock, Star, Camera, Loader2 } from 'lucide-react'
+import { Check, Trash2, Edit3, ChevronDown, ChevronUp, RotateCcw, Clock, Star, Camera, Loader2, CloudOff } from 'lucide-react'
 import { useGame } from '../hooks/useGame'
 import { useCharacter } from '../hooks/useCharacter'
 import { isTaskAvailable, isTaskCompletedToday } from '../utils/streak'
@@ -98,6 +98,7 @@ export default function TaskItem({ task, completions, onEdit }) {
             <div className="flex items-center gap-2">
               <span className="text-sm">{categoryEmojis[task.category]||'📝'}</span>
               <h3 className={`font-semibold truncate ${available?'text-gray-100':'text-gray-500 line-through'}`}>{task.title}</h3>
+              {task._pending && <CloudOff className="w-3 h-3 text-yellow-500 flex-shrink-0" title="Wartet auf Synchronisation" />}
               {task.verification_type === 'photo' && available && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 rounded uppercase font-bold">Foto</span>}
               {task.verification_type === 'steps' && available && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 rounded uppercase font-bold">Schritte</span>}
             </div>

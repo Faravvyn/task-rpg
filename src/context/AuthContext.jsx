@@ -91,7 +91,8 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase.from('characters').insert({
         user_id: user.id, name: characterData.name, class: characterData.charClass,
-        stats: characterData.stats, level: 1, xp: 0
+        stats: characterData.stats, level: 1, xp: 0,
+        last_step_sync: new Date().toISOString()
       }).select().single()
       if (error) return { data: null, error }
       setCharacter(data)

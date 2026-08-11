@@ -401,6 +401,7 @@ export function AdventureProvider({ children }) {
     }
 
     if (Object.keys(updates).length > 0) {
+      updates.last_step_sync = nowDate.toISOString()
       updateCharacter(updates)
     }
   }, [loaded, character?.last_step_sync, character?.weekly_steps, updateCharacter])

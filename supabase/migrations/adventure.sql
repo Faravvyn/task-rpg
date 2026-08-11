@@ -95,6 +95,12 @@ DROP POLICY IF EXISTS "QC lesen" ON quest_completions;    CREATE POLICY "QC lese
 DROP POLICY IF EXISTS "QC schreiben" ON quest_completions; CREATE POLICY "QC schreiben" ON quest_completions FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS idx_qc_user ON quest_completions(user_id);
 
+-- Idempotenz: client_mutation_id für task_completions (verhindert Doppel-Insert bei Retry)
+ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS client_mutation_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS task_completions_client_mutation_id_idx
+  ON task_completions (client_mutation_id)
+  WHERE client_mutation_id IS NOT NULL;
+
 -- ---------------------------------------------------------------------
 -- 6. FREUNDES-QUESTS (von Freund zu Freund)
 -- ---------------------------------------------------------------------

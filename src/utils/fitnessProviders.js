@@ -165,10 +165,26 @@ class GoogleFitProvider {
   }
 
   disconnect() {
-    // Google Fit hat keinen Revoke-Endpunkt für Fitness-Scopes,
-    // aber wir können das Token löschen. Der Nutzer kann in seinem
-    // Google-Konto unter "Drittanbieter-Apps" die Berechtigung entziehen.
+    this.stopBackgroundRefresh()
     clearTokens(this.id)
+  }
+
+  // Proaktiver Hintergrund-Token-Refresh (alle 5 Min, 10 Min vor Ablauf)
+  _refreshInterval = null
+  startBackgroundRefresh() {
+    if (this._refreshInterval) return
+    this._refreshInterval = setInterval(async () => {
+      if (!this.isConnected()) return
+      const tokens = loadTokens(this.id)
+      if (!tokens) return
+      if (Date.now() - tokens.obtained_at > 3000 * 1000) {
+        try { await this._refreshToken() }
+        catch (e) { console.warn('[GoogleFit] BG-Refresh fehlgeschlagen:', e.message) }
+      }
+    }, 5 * 60 * 1000)
+  }
+  stopBackgroundRefresh() {
+    if (this._refreshInterval) { clearInterval(this._refreshInterval); this._refreshInterval = null }
   }
 
   // Schritt-Daten für einen Zeitraum abrufen
@@ -306,15 +322,11 @@ class StravaProvider {
   async handleCallback(code, state) {
     if (!validateState(state)) throw new Error('Ungültiger OAuth-State.')
 
-    const res = await fetch('https://www.strava.com/oauth/token', {
+    const fnUrl = '/.netlify/functions/oauth-token'
+    const res = await fetch(fnUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: this.clientId,
-        client_secret: import.meta.env.VITE_STRAVA_CLIENT_SECRET || '',
-        code,
-        grant_type: 'authorization_code',
-      }),
+      body: JSON.stringify({ provider: 'strava', code, redirect_uri: this.redirectUri, grant_type: 'authorization_code' }),
     })
 
     if (!res.ok) throw new Error('Strava Token-Austausch fehlgeschlagen.')
@@ -328,15 +340,11 @@ class StravaProvider {
     const tokens = loadTokens(this.id)
     if (!tokens?.refresh_token) throw new Error('Kein Refresh Token.')
 
-    const res = await fetch('https://www.strava.com/oauth/token', {
+    const fnUrl = '/.netlify/functions/oauth-token'
+    const res = await fetch(fnUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: this.clientId,
-        client_secret: import.meta.env.VITE_STRAVA_CLIENT_SECRET || '',
-        refresh_token: tokens.refresh_token,
-        grant_type: 'refresh_token',
-      }),
+      body: JSON.stringify({ provider: 'strava', refresh_token: tokens.refresh_token, grant_type: 'refresh_token' }),
     })
 
     if (!res.ok) {
@@ -432,11 +440,8 @@ class GoogleHealthProvider {
     return this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || '')
   }
 
-  get clientSecret() {
-    return this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_SECRET || import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '')
-  }
 
-  get redirectUri() {
+    get redirectUri() {
     const configured = this._cleanEnv(import.meta.env.VITE_GOOGLE_HEALTH_REDIRECT_URI || import.meta.env.VITE_GOOGLE_REDIRECT_URI || '')
     return configured || window.location.origin
   }
@@ -511,10 +516,11 @@ class GoogleHealthProvider {
   }
 
   async _exchangeCode(code) {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
+    const fnUrl = '/.netlify/functions/oauth-token'
+    const res = await fetch(fnUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ code, client_id: this.clientId, client_secret: this.clientSecret, redirect_uri: this.redirectUri, grant_type: 'authorization_code' }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'google_health', code, redirect_uri: this.redirectUri, grant_type: 'authorization_code' }),
     })
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error_description || 'Token-Fehler') }
     const tokens = await res.json()
@@ -526,10 +532,11 @@ class GoogleHealthProvider {
   async _refreshToken() {
     const tokens = loadTokens(this.id)
     if (!tokens?.refresh_token) throw new Error('Bitte erneut verbinden.')
-    const res = await fetch('https://oauth2.googleapis.com/token', {
+    const fnUrl = '/.netlify/functions/oauth-token'
+    const res = await fetch(fnUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: this.clientId, client_secret: this.clientSecret, refresh_token: tokens.refresh_token, grant_type: 'refresh_token' }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'google_health', refresh_token: tokens.refresh_token, grant_type: 'refresh_token' }),
     })
     if (!res.ok) { clearTokens(this.id); throw new Error('Session abgelaufen. Bitte neu verbinden.') }
     const newTokens = await res.json()
@@ -727,15 +734,11 @@ class FitbitProvider {
     if (!validateState(state)) throw new Error('Ungültiger OAuth-State.')
 
     const redirectUri = import.meta.env.VITE_FITBIT_REDIRECT_URI || window.location.origin + '/fitness/callback'
-    const basicAuth = btoa(`${this.clientId}:${import.meta.env.VITE_FITBIT_CLIENT_SECRET || ''}`)
-
-    const res = await fetch('https://api.fitbit.com/oauth2/token', {
+    const fnUrl = '/.netlify/functions/oauth-token'
+    const res = await fetch(fnUrl, {
       method: 'POST',
-      headers: {
-        'Authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ code, grant_type: 'authorization_code', redirect_uri: redirectUri }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'fitbit', code, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
     })
 
     if (!res.ok) throw new Error('Fitbit Token-Austausch fehlgeschlagen.')

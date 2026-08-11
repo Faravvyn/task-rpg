@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
-import React, { lazy, Suspense } from 'react'
+import React, { lazy, Suspense, useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
+import { getProvider } from './utils/fitnessProviders'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -32,6 +33,15 @@ const GoogleFitCallback = lazy(() => import('./pages/GoogleFitCallback'))
 
 export default function App() {
   const { user, loading } = useAuth()
+
+  // Hintergrund-Token-Refresh für Google Fit starten/stoppen
+  useEffect(() => {
+    if (!user) return
+    const gf = getProvider('google_fit')
+    if (gf?.isConnected()) gf.startBackgroundRefresh()
+    return () => gf?.stopBackgroundRefresh()
+  }, [user])
+
   if (loading) return (
     <div className="min-h-screen bg-dark-500 flex items-center justify-center">
       <div className="text-center">

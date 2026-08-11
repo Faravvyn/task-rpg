@@ -1,9 +1,10 @@
 // =====================================================================
 // StepSync – Fitness-Provider & Schritte (Daily/Weekly/Monthly Toggle)
 // =====================================================================
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useAdventure } from '../context/AdventureContext'
+import { useAutoSync } from '../hooks/useAutoSync'
 import {
   getConnectedProviders, getProvider,
   fetchStepsFromAllProviders, ManualProvider, ALL_PROVIDERS,
@@ -76,11 +77,9 @@ export default function StepSync() {
   }
 
   // ---- Synchronisieren ----
-  const handleSync = async () => {
+  const handleSync = useCallback(async (silent = false) => {
     if (!character) return
-    setSyncing(true)
-    setStatusMsg('⏳ Rufe Schrittdaten ab...')
-    setStatusType('success')
+    if (!silent) { setSyncing(true); setStatusMsg('⏳ Rufe Schrittdaten ab...'); setStatusType('success') }
 
     try {
       const tokens = localStorage.getItem('taskrpg_fitness_google_fit')
@@ -94,12 +93,14 @@ export default function StepSync() {
       const stepsData = await fetchStepsFromAllProviders(lastWeek, today)
 
       if (!stepsData || stepsData.length === 0) {
-        showStatus(
-          `📱 Google Fit verbunden ${hasToken ? '✅' : '❌'} – aber keine Schrittdaten.\n\n` +
-          '👉 Auf Android-Handy: Google Fit App öffnen → Schritte prüfen → TaskRPG öffnen → Syncen',
-          'error'
-        )
-        setSyncing(false)
+        if (!silent) {
+          showStatus(
+            `📱 Google Fit verbunden ${hasToken ? '✅' : '❌'} – aber keine Schrittdaten.\n\n` +
+            '👉 Auf Android-Handy: Google Fit App öffnen → Schritte prüfen → TaskRPG öffnen → Syncen',
+            'error'
+          )
+        }
+        if (!silent) setSyncing(false)
         return
       }
 
@@ -111,17 +112,21 @@ export default function StepSync() {
 
       if (newSteps > 0) {
         await syncSteps(newSteps)
-        showStatus(`✅ ${newSteps.toLocaleString()} neue Schritte!`, 'success')
+        if (!silent) showStatus(`✅ ${newSteps.toLocaleString()} neue Schritte!`, 'success')
       } else if (todaySteps > 0) {
-        showStatus(`✅ ${todaySteps.toLocaleString()} Schritte heute – aktuell!`, 'success')
+        if (!silent) showStatus(`✅ ${todaySteps.toLocaleString()} Schritte heute – aktuell!`, 'success')
       } else {
-        showStatus('Heute noch keine Schritte – lauf ein bisschen! 🚶', 'error')
+        if (!silent) showStatus('Heute noch keine Schritte – lauf ein bisschen! 🚶', 'error')
       }
     } catch (e) {
-      showStatus(`❌ ${e.message}`, 'error')
+      if (!silent) showStatus(`❌ ${e.message}`, 'error')
     }
-    setSyncing(false)
-  }
+    if (!silent) setSyncing(false)
+  }, [character, syncSteps])
+
+  // Auto-Sync: bei App-Start, Tab-Fokus und alle 15 Min
+  const doAutoSync = useCallback(() => handleSync(true), [handleSync])
+  useAutoSync(doAutoSync, { intervalMs: 15 * 60 * 1000, enabled: !!character })
 
   // ---- Manuelle Eingabe ----
   const handleManualSubmit = () => {

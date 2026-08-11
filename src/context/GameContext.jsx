@@ -9,6 +9,8 @@ import { getTodayEvent } from '../utils/achievements'
 import { formatDate } from '../utils/streak'
 import { fetchArenaWinCounts } from '../lib/adventureRepo'
 import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
+import { enqueueMutation, flushQueue, remapQueueId } from '../lib/offlineQueue'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
 
 const GameContext = createContext({})
 const initialState = {
@@ -45,9 +47,10 @@ export function GameProvider({ children }) {
     doubledArtifactIds, grantRandomArtifact, userTeam, userMonsters 
   } = useAdventure()
   
-  const Pr = calculateLevel // Definition nach oben verschoben
+  const Pr = calculateLevel
   const todayEvent = getTodayEvent(formatDate(new Date()))
   const eventXpMult = todayEvent?.effect?.type === 'xp_mult' ? todayEvent.effect.value : 1
+  const isOnline = useOnlineStatus()
 
   const fetchTasks = useCallback(async () => {
     if (!user || !isSupabaseConfigured()) return
@@ -120,11 +123,9 @@ export function GameProvider({ children }) {
       const { data, error } = await supabase.from('challenges').select('*').or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`).order('created_at', { ascending: false })
       if (error || !data) return
       
-      // Auto-Resolve expired challenges
       const now = new Date()
       for (const ch of data) {
         if (ch.status === 'active' && new Date(ch.end_date) < now) {
-           // Hier müsste normalerweise eine Auswertung (RPC) stattfinden
            await supabase.from('challenges').update({ status: 'completed' }).eq('id', ch.id)
         }
       }
@@ -151,13 +152,11 @@ export function GameProvider({ children }) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_completions', filter: `user_id=eq.${user.id}` }, () => fetchCompletions())
         .subscribe()
 
-      // NEU: Realtime für Challenges – Duelle kommen sofort beim Gegner an
       const challengesChannel = supabase.channel('challenges_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `opponent_id=eq.${user.id}` }, () => fetchChallenges())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `challenger_id=eq.${user.id}` }, () => fetchChallenges())
         .subscribe()
 
-      // NEU: Realtime für Friends & Friend-Requests
       const friendsChannel = supabase.channel('friends_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `receiver_id=eq.${user.id}` }, () => fetchFriends())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `requester_id=eq.${user.id}` }, () => fetchFriends())
@@ -172,8 +171,23 @@ export function GameProvider({ children }) {
     }
   }, [user, character, fetchTasks, fetchCompletions, fetchLeaderboard, fetchFriends, fetchChallenges])
 
+  // ==================== OFFLINE CAPABLE CRUD ====================
+
   const createTask = async (taskData) => {
     if (!user) return { error: { message: 'Nicht eingeloggt' } }
+    const tempId = 'temp_' + crypto.randomUUID()
+    const optimisticTask = {
+      id: tempId, user_id: user.id, ...taskData,
+      xp_reward: getXpReward(taskData.difficulty), is_active: true,
+      created_at: new Date().toISOString(), _pending: true,
+    }
+    dispatch({ type: 'ADD_TASK', payload: optimisticTask })
+
+    if (!isOnline) {
+      enqueueMutation({ id: tempId, type: 'task_create', payload: { ...taskData, tempId } })
+      return { data: optimisticTask, error: null }
+    }
+
     try {
       const { data, error } = await supabase.from('tasks').insert({
         user_id: user.id, title: taskData.title, category: taskData.category,
@@ -183,29 +197,95 @@ export function GameProvider({ children }) {
         verification_target: taskData.verification_target || null,
         verification_value: taskData.verification_value || null
       }).select().single()
-      if (!error && data) dispatch({ type: 'ADD_TASK', payload: data })
-      return { data, error }
-    } catch (err) { return { error: { message: err.message } } }
+      if (error) throw error
+      dispatch({ type: 'DELETE_TASK', payload: tempId })
+      dispatch({ type: 'ADD_TASK', payload: data })
+      return { data, error: null }
+    } catch (err) {
+      enqueueMutation({ id: tempId, type: 'task_create', payload: { ...taskData, tempId } })
+      return { data: optimisticTask, error: null }
+    }
   }
+
   const editTask = async (id, updates) => {
+    const previous = state.tasks.find(t => t.id === id)
+    dispatch({ type: 'UPDATE_TASK', payload: { ...previous, ...updates } })
+
+    if (!isOnline) {
+      enqueueMutation({ id: 'edit_' + id + '_' + Date.now(), type: 'task_edit', payload: { id, updates } })
+      return { data: { ...previous, ...updates }, error: null }
+    }
+
     try {
       const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single()
-      if (!error && data) dispatch({ type: 'UPDATE_TASK', payload: data })
-      return { data, error }
-    } catch (err) { return { error: { message: err.message } } }
+      if (error) throw error
+      dispatch({ type: 'UPDATE_TASK', payload: data })
+      return { data, error: null }
+    } catch (err) {
+      enqueueMutation({ id: 'edit_' + id + '_' + Date.now(), type: 'task_edit', payload: { id, updates } })
+      return { data: { ...previous, ...updates }, error: null }
+    }
   }
+
   const deleteTask = async (id) => {
-    const { error } = await supabase.from('tasks').delete().eq('id', id)
-    if (!error) dispatch({ type: 'DELETE_TASK', payload: id })
-    return { error }
+    dispatch({ type: 'DELETE_TASK', payload: id })
+
+    if (!isOnline) {
+      enqueueMutation({ id: 'delete_' + id, type: 'task_delete', payload: { id } })
+      return { error: null }
+    }
+
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', id)
+      if (error) throw error
+      return { error: null }
+    } catch (err) {
+      enqueueMutation({ id: 'delete_' + id, type: 'task_delete', payload: { id } })
+      return { error: null }
+    }
   }
   
   const completeTask = async (task, event) => {
     if (!user || !character) return
-    const now = new Date()
-    const streak = calculateStreak(state.completions)
+
     const baseXp = task.xp_reward || getXpReward(task.difficulty)
     const baseGold = getGoldReward(task.difficulty)
+
+    // ---- Optimistisches UI-Feedback (immer, auch offline) ----
+    if (event) {
+      const rect = event.target.getBoundingClientRect()
+      vibrate(VIBRATION_PATTERNS.SUCCESS)
+      dispatch({ type: 'SHOW_XP_POPUP', payload: {
+        xp: baseXp, gold: baseGold, isCrit: false, isFrenzy: false,
+        x: rect.left + rect.width / 2, y: rect.top,
+      } })
+      setTimeout(() => dispatch({ type: 'HIDE_XP_POPUP' }), 2000)
+    }
+
+    const optimisticCompletion = {
+      id: 'temp_' + crypto.randomUUID(), user_id: user.id, task_id: task.id,
+      xp_gained: baseXp, completed_at: new Date().toISOString(), _pending: true,
+    }
+    dispatch({ type: 'ADD_COMPLETION', payload: optimisticCompletion })
+
+    // ---- Offline: einfachen XP/Gold-Update, Queue den Rest ----
+    if (!isOnline) {
+      await updateCharacter({
+        xp: (character.xp || 0) + baseXp,
+        gold: (character.gold || 0) + baseGold,
+      })
+      enqueueMutation({
+        id: optimisticCompletion.id,
+        type: 'task_complete',
+        payload: { taskId: task.id, taskSnapshot: task, mutationId: optimisticCompletion.id },
+      })
+      return { data: optimisticCompletion, xpGained: baseXp, goldGained: baseGold, offline: true }
+    }
+
+    // ---- Online: vollständige Server-Logik ----
+    try {
+      const now = new Date()
+    const streak = calculateStreak(state.completions)
 
     const lastComps = state.completions.slice(0, 2)
     let frenzyActive = false
@@ -235,10 +315,9 @@ export function GameProvider({ children }) {
     if (compError) return { error: compError }
     dispatch({ type: 'ADD_COMPLETION', payload: completion })
 
-    // --- Monster Encounter Logik ---
     const luck = character.stats?.glueck || 0
     const hasLure = (character.consumables?.monster_lure || 0) > 0
-    const hintChance = hasLure ? 1.0 : (0.2 + (luck * 0.02)) // Höhere Basis-Chance
+    const hintChance = hasLure ? 1.0 : (0.2 + (luck * 0.02))
     
     if (Math.random() < hintChance) {
       const bossTriggers = [
@@ -295,12 +374,10 @@ export function GameProvider({ children }) {
 
     await updateCharacter(updates)
     
-    // Dungeon Chest & Monster Level Up
     if (foundChest) {
        vibrate(VIBRATION_PATTERNS.ITEM_DROP)
        await grantRandomArtifact('common')
        
-       // Monster XP Gain
        const teamIds = [userTeam.slot_1, userTeam.slot_2, userTeam.slot_3].filter(Boolean)
        for (const mId of teamIds) {
          const monster = userMonsters.find(m => m.id === mId)
@@ -328,18 +405,110 @@ export function GameProvider({ children }) {
       else vibrate(VIBRATION_PATTERNS.SUCCESS)
 
       dispatch({ type: 'SHOW_XP_POPUP', payload: { 
-        xp: finalXp, 
-        gold: finalGold, 
-        isCrit,
-        isFrenzy: frenzyActive,
-        x: rect.left + rect.width / 2, 
-        y: rect.top 
+        xp: finalXp, gold: finalGold, isCrit, isFrenzy: frenzyActive,
+        x: rect.left + rect.width / 2, y: rect.top 
       } })
       setTimeout(() => dispatch({ type: 'HIDE_XP_POPUP' }), 2000)
     }
 
     return { data: completion, xpGained: finalXp, goldGained: finalGold }
+    } catch (err) {
+      console.warn('[completeTask] Online-Sync fehlgeschlagen, fallback auf Offline-Queue:', err.message)
+      await updateCharacter({
+        xp: (character.xp || 0) + baseXp,
+        gold: (character.gold || 0) + baseGold,
+      })
+      enqueueMutation({
+        id: optimisticCompletion.id,
+        type: 'task_complete',
+        payload: { taskId: task.id, taskSnapshot: task, mutationId: optimisticCompletion.id },
+      })
+      return { data: optimisticCompletion, xpGained: baseXp, goldGained: baseGold, offline: true }
+    }
   }
+
+  // ==================== RECONNECT: Queue flushen ====================
+
+  useEffect(() => {
+    if (!isOnline || !user) return
+    flushQueue({
+      task_create: async (payload) => {
+        const { tempId, ...taskData } = payload
+        const { data, error } = await supabase.from('tasks').insert({
+          user_id: user.id, title: taskData.title, category: taskData.category,
+          difficulty: taskData.difficulty, repeat_type: taskData.repeat_type,
+          xp_reward: getXpReward(taskData.difficulty), is_active: true,
+          verification_type: taskData.verification_type || 'none',
+          verification_target: taskData.verification_target || null,
+          verification_value: taskData.verification_value || null
+        }).select().single()
+        if (error) return false
+        dispatch({ type: 'DELETE_TASK', payload: tempId })
+        dispatch({ type: 'ADD_TASK', payload: data })
+        remapQueueId(tempId, data.id)  // edit/delete auf tempId → echte ID umbiegen
+        return true
+      },
+      task_edit: async ({ id, updates }) => {
+        const { error } = await supabase.from('tasks').update(updates).eq('id', id)
+        return !error
+      },
+      task_delete: async ({ id }) => {
+        const { error } = await supabase.from('tasks').delete().eq('id', id)
+        return !error
+      },
+      task_complete: async ({ taskId, taskSnapshot, mutationId }) => {
+        const task = taskSnapshot
+        const baseXp = task.xp_reward || getXpReward(task.difficulty)
+        const baseGold = getGoldReward(task.difficulty)
+        const streak = calculateStreak(state.completions)
+        const stats = character?.stats || {}
+        let finalXp = applyXp(baseXp, streak, {
+          equippedArtifactIds: equippedArtifactIds || [],
+          ownedArtifactIds: equippedArtifactIdsUnique || [],
+          doubledArtifactIds: doubledArtifactIds || [],
+          stats,
+        })
+        let finalGold = baseGold
+        if (character?.skills?.treasure_hunter) finalGold = Math.round(finalGold * 1.15)
+
+        // Idempotent: client_mutation_id verhindert Doppel-Insert bei Retry
+        const { data: completion, error } = await supabase.from('task_completions')
+          .insert({ user_id: user.id, task_id: taskId, xp_gained: finalXp, client_mutation_id: mutationId || null })
+          .select().single()
+
+        if (error) {
+          // Unique-Constraint = bereits erfolgreich (vorheriger Versuch)
+          if (error.code === '23505') return true
+          return false
+        }
+
+        // Differenz zur optimistisch gutgeschriebenen baseXp/baseGold nachbuchen
+        const xpDiff = finalXp - baseXp
+        const goldDiff = finalGold - baseGold
+        if (xpDiff !== 0 || goldDiff !== 0 && character) {
+          await updateCharacter({
+            xp: (character.xp || 0) + xpDiff,
+            gold: (character.gold || 0) + goldDiff,
+          })
+        }
+        try { dealBossDamage?.(task.difficulty) } catch {}
+        const statKey = categoryStatMap[task.category]
+        if (statKey && character) {
+          const currentStats = { ...(character.stats || {}) }
+          currentStats[statKey] = (currentStats[statKey] || 0) + 1
+          await updateCharacter({ stats: currentStats })
+        }
+        await fetchTasks()
+        await fetchCompletions()
+        return true
+      },
+    }).then(() => {
+      fetchTasks()
+      fetchCompletions()
+    })
+  }, [isOnline, user])
+
+  // ==================== Friends / Social (unverändert) ====================
 
   const addFriend = async (username) => {
     if (!user) return { error: { message: 'Nicht eingeloggt' } }
@@ -391,6 +560,7 @@ export function GameProvider({ children }) {
     const { error } = await supabase.from('challenges').update({ status: 'declined' }).eq('id', challengeId)
     if (!error) fetchChallenges(); return { error }
   }
+
   return (
     <GameContext.Provider value={{ ...state, fetchTasks, fetchCompletions, fetchLeaderboard, fetchFriends, fetchChallenges, createTask, editTask, deleteTask, completeTask, addFriend, acceptFriend, removeFriend, nudgeFriend, createChallenge, acceptChallenge, declineChallenge, dispatch }}>
       {children}
