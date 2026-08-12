@@ -1,3 +1,14 @@
+// Fonts self-hosted (@fontsource) – offline-fähig, kein CDN-Request nötig
+import '@fontsource/cinzel/400.css'
+import '@fontsource/cinzel/600.css'
+import '@fontsource/cinzel/700.css'
+import '@fontsource/cinzel/900.css'
+import '@fontsource/nunito/300.css'
+import '@fontsource/nunito/400.css'
+import '@fontsource/nunito/600.css'
+import '@fontsource/nunito/700.css'
+import '@fontsource/nunito/800.css'
+
 // Datei: src/main.jsx – Provider-Reihenfolge:
 // Auth → Adventure → Game → Achievement → Notification
 import React from 'react'
@@ -25,7 +36,7 @@ function Root() {
 
   return (
     <React.StrictMode>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true }}>
         <AuthProvider>
           <AdventureProvider>
             <GameProvider>
