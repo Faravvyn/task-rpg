@@ -20,7 +20,7 @@ export default function ArtifactCard({
         ${selected ? 'ring-2 ring-gold-400 ' + r.bg : ''}
         ${charArtifact.is_equipped && !selected ? 'border-gold-500/40 ' + r.bg : ''}`}
     >
-      <div className={`w-11 h-11 flex-shrink-0 rounded-lg ${r.bg} ${r.border} border flex items-center justify-center text-2xl shadow ${r.glow}`}>
+      <div className={`w-11 h-11 flex-shrink-0 rounded-lg ${r.bg} ${r.border} border flex items-center justify-center text-2xl shadow ${r.glow} ${art.rarity === 'legendary' ? 'legendary-glow' : ''}`}>
         {art.icon || '💎'}
       </div>
       <div className="flex-1 min-w-0">

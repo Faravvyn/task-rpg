@@ -14,6 +14,8 @@ import { calculateStreak, formatDate } from '../utils/streak'
 import { calculateLevel } from '../utils/xp'
 import { rarityInfo } from '../utils/adventure'
 import { useRemote, fetchUserAchievements, insertUserAchievement } from '../lib/adventureRepo'
+import { saveCache, loadCache } from '../lib/persistentCache'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
 
 const AchievementContext = createContext({})
 const unlockedKey = (uid) => `taskrpg_unlocked_${uid}`
@@ -23,6 +25,7 @@ export function AchievementProvider({ children }) {
   const { completions, tasks, friends } = useGame()
   const { characterArtifacts, ownedArtifactIds, setProgress, boss, arena, friendTasks } = useAdventure()
   const REMOTE = useRemote()
+  const isOnline = useOnlineStatus()
 
   const [unlocked, setUnlocked] = useState(() => new Set())
   const [celebration, setCelebration] = useState(null)  // { items: [{type,icon,title,rewardXp}] }
@@ -31,16 +34,28 @@ export function AchievementProvider({ children }) {
   const charRef = useRef(character)
   useEffect(() => { charRef.current = character }, [character])
 
-  // ---- Laden ----
+  // ---- Laden (Cache-first, kein "leer" bei Offline-Start) ----
   useEffect(() => {
     if (!user) { setUnlocked(new Set()); initRef.current = false; setLoading(false); return }
     let cancelled = false
-    
+
+    // Sofort aus Cache hydratisieren
+    const cachedIds = loadCache('unlocked_' + user.id)
+    if (cachedIds) setUnlocked(new Set(cachedIds))
+
     async function load() {
       if (REMOTE) {
+        if (!navigator.onLine) { initRef.current = false; setLoading(false); return } // Cache-Stand behalten
         const remoteIds = await fetchUserAchievements(user.id)
         if (cancelled) return
+        if (remoteIds === null) {
+          // Fetch fehlgeschlagen (nicht "leer") → Cache behalten, nichts überschreiben
+          initRef.current = false
+          setLoading(false)
+          return
+        }
         setUnlocked(new Set(remoteIds))
+        saveCache('unlocked_' + user.id, remoteIds)
       } else {
         try {
           const raw = localStorage.getItem(unlockedKey(user.id))
@@ -50,10 +65,24 @@ export function AchievementProvider({ children }) {
       initRef.current = false
       setLoading(false)
     }
-    
+
     load()
     return () => { cancelled = true }
   }, [user, REMOTE])
+
+  // ---- Reconnect: Remote-Stand erneut abgleichen (Union statt Overwrite) ----
+  useEffect(() => {
+    if (!isOnline || !user || !REMOTE) return
+    fetchUserAchievements(user.id).then((remoteIds) => {
+      if (remoteIds && remoteIds.length > 0) {
+        setUnlocked((prev) => {
+          const merged = new Set([...prev, ...remoteIds])
+          saveCache('unlocked_' + user.id, Array.from(merged))
+          return merged
+        })
+      }
+    })
+  }, [isOnline, user, REMOTE])
 
   const persist = useCallback((ids) => {
     if (!user) return

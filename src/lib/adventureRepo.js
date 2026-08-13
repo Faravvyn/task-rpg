@@ -219,11 +219,12 @@ export async function upsertUserTeam(userId, slots) {
 // ---------------------------------------------------------------------
 export async function fetchUserAchievements(userId) {
   if (!userId) return []
+  if (!navigator.onLine) return null  // eindeutig: kein Versuch, kein Ergebnis
   const { data, error } = await supabase.from('user_achievements').select('achievement_id').eq('user_id', userId)
   if (error) { 
     if (error.code === 'PGRST301' || error.status === 401) return [] // Session invalid/expired
     console.warn('Achievements:', error.message); 
-    return [] 
+    return null // eindeutig: Fetch fehlgeschlagen, nicht "Nutzer hat 0"
   }
   return (data || []).map(r => r.achievement_id)
 }

@@ -170,3 +170,61 @@
   100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 .ach-pop { animation: achPop 0.5s cubic-bezier(0.68,-0.55,0.265,1.55) forwards; }
+
+/* =========================================================
+   Animation-Utilities (Teil A: Button-Feedback, Glows, Flash)
+   ========================================================= */
+
+/* Button-Press-Feedback – überall wo .btn-primary/.btn-secondary genutzt wird */
+.btn-primary, .btn-secondary {
+  transition: transform 0.1s ease-out;
+}
+.btn-primary:active, .btn-secondary:active {
+  transform: scale(0.96);
+}
+
+/* Karten-Hover-Lift (Desktop) */
+.card {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Legendäre Artefakte/Monster: pulsierender Glow statt statischem Schatten */
+.legendary-glow {
+  animation: legendaryPulse 2.5s ease-in-out infinite;
+}
+
+/* Niedrige HP: pulsierende Warnung */
+.hp-critical {
+  animation: hpPulse 1s ease-in-out infinite;
+}
+
+/* Bildschirm-Treffer-Flash (rot bei Schaden, gold bei kritischem Treffer) */
+.impact-flash-red {
+  position: fixed; inset: 0; pointer-events: none; z-index: 200;
+  background: radial-gradient(circle, transparent 40%, rgba(220,38,38,0.35) 100%);
+  animation: impactFlash 0.3s ease-out forwards;
+}
+.impact-flash-gold {
+  position: fixed; inset: 0; pointer-events: none; z-index: 200;
+  background: radial-gradient(circle, transparent 30%, rgba(255,208,64,0.3) 100%);
+  animation: impactFlash 0.4s ease-out forwards;
+}
+
+/* Keyframes für die obigen Plain-CSS-Klassen (garantiert im Bundle) */
+@keyframes impactFlash {
+  0% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+@keyframes hpPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@keyframes legendaryPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,208,64,0.4), 0 0 2px rgba(255,208,64,0.6); }
+  50% { box-shadow: 0 0 24px rgba(255,208,64,0.8), 0 0 6px rgba(255,208,64,0.9); }
+}

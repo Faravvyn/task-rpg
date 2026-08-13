@@ -1,10 +1,11 @@
 // Datei: src/pages/BossPage.jsx
 // Wöchentlicher Raid-Boss. Tasks = Angriffe. Artefakte erhöhen den Schaden.
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAdventure } from '../context/AdventureContext'
 import { useCharacter } from '../hooks/useCharacter'
 import { Link } from 'react-router-dom'
 import { Swords, Users, Trophy, Sparkles, ListTodo, Shield } from 'lucide-react'
+import DamageNumber from '../components/DamageNumber'
 import {
   BASE_TASK_DAMAGE, getDamageMultiplier, getBossLootTier, rarityInfo,
 } from '../utils/adventure'
@@ -12,6 +13,21 @@ import {
 export default function BossPage() {
   const { boss, claimBossLoot, equippedArtifactIds, equippedArtifactIdsUnique, equippedItems } = useAdventure()
   const [lootMsg, setLootMsg] = useState(null)
+
+  // B5: Eintritts-Feedback – Schaden seit letztem Besuch anzeigen
+  const [entryDmg, setEntryDmg] = useState(null)
+  const lastSeenDmgRef = useRef(null)
+
+  useEffect(() => {
+    if (!boss) return
+    const key = 'taskrpg_boss_last_seen_dmg_' + boss.weekStart
+    const lastSeen = parseInt(localStorage.getItem(key) || '0')
+    if (boss.myDamage > lastSeen) {
+      setEntryDmg(boss.myDamage - lastSeen)
+      setTimeout(() => setEntryDmg(null), 1200)
+    }
+    localStorage.setItem(key, String(boss.myDamage))
+  }, [boss?.myDamage, boss?.weekStart])
 
   if (!boss) {
     return (
@@ -36,6 +52,8 @@ export default function BossPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="font-title text-2xl text-gold-400 flex items-center gap-2"><Swords className="w-6 h-6" />Wöchentlicher Boss</h1>
+      {entryDmg && <div className="impact-flash-red" />}
+      {entryDmg && <DamageNumber value={entryDmg} x="50%" y="30%" onDone={() => {}} />}
 
       {/* Boss-Karte */}
       <div className={`card relative overflow-hidden ${boss.defeated ? 'border-green-700/40' : 'border-red-800/40'} min-h-[300px] flex flex-col justify-end bg-cover bg-center`}
@@ -58,7 +76,7 @@ export default function BossPage() {
             <span className="text-gray-200 drop-shadow-md">BOSS HP</span>
             <span className="text-red-400 font-mono drop-shadow-md">{boss.hp} / {boss.maxHp}</span>
           </div>
-          <div className="h-6 bg-black/60 rounded-full overflow-hidden border border-gray-700 shadow-inner">
+          <div className={`h-6 bg-black/60 rounded-full overflow-hidden border border-gray-700 shadow-inner ${hpPercent < 20 ? 'hp-critical' : ''}`}>
             <div className="h-full bg-gradient-to-r from-red-900 via-red-600 to-red-500 transition-all duration-1000 ease-out relative"
               style={{ width: `${hpPercent}%` }}>
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>

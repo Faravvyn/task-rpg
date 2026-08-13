@@ -11,6 +11,7 @@ import { fetchArenaWinCounts } from '../lib/adventureRepo'
 import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
 import { enqueueMutation, flushQueue, remapQueueId } from '../lib/offlineQueue'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { saveCache, loadCache } from '../lib/persistentCache'
 
 const GameContext = createContext({})
 const initialState = {
@@ -56,7 +57,10 @@ export function GameProvider({ children }) {
     if (!user || !isSupabaseConfigured()) return
     try {
       const { data, error } = await supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-      if (!error && data) dispatch({ type: 'SET_TASKS', payload: data })
+      if (!error && data) {
+        dispatch({ type: 'SET_TASKS', payload: data })
+        saveCache('tasks_' + user.id, data)
+      }
     } catch (e) { console.warn('Tasks:', e.message) }
   }, [user])
 
@@ -64,7 +68,10 @@ export function GameProvider({ children }) {
     if (!user || !isSupabaseConfigured()) return
     try {
       const { data, error } = await supabase.from('task_completions').select('*').eq('user_id', user.id).order('completed_at', { ascending: false })
-      if (!error && data) dispatch({ type: 'SET_COMPLETIONS', payload: data })
+      if (!error && data) {
+        dispatch({ type: 'SET_COMPLETIONS', payload: data })
+        saveCache('completions_' + user.id, data)
+      }
     } catch (e) { console.warn('Completions:', e.message) }
   }, [user])
 
@@ -142,6 +149,12 @@ export function GameProvider({ children }) {
 
   useEffect(() => {
     if (user && character) { 
+      // Cache-Hydration VOR dem Netzwerk-Fetch (zeigt letzten Stand sofort, auch offline)
+      const cachedTasks = loadCache('tasks_' + user.id)
+      if (cachedTasks) dispatch({ type: 'SET_TASKS', payload: cachedTasks })
+      const cachedCompletions = loadCache('completions_' + user.id)
+      if (cachedCompletions) dispatch({ type: 'SET_COMPLETIONS', payload: cachedCompletions })
+
       fetchTasks(); fetchCompletions(); fetchLeaderboard(); fetchFriends(); fetchChallenges() 
       
       const tasksChannel = supabase.channel('tasks_realtime')

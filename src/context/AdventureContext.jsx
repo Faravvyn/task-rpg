@@ -11,6 +11,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabase'
+import { saveCache, loadCache } from '../lib/persistentCache'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import {
   ARTIFACTS, getArtifact, getSetProgress, getCompletedSetBonuses,
   getWeekStartStr, getBossForWeek, getBossLootTier, calculateTaskDamage,
@@ -62,6 +64,7 @@ function writeMailbox(t) { try { localStorage.setItem(FRIEND_MAILBOX_KEY, JSON.s
 export function AdventureProvider({ children }) {
   const { user, profile, character, updateCharacter, reloadCharacter } = useAuth()
   const REMOTE = useRemote()
+  const isOnline = useOnlineStatus()
   const weekStart = getWeekStartStr()
   const todayEvent = getTodayEvent(formatDate(new Date()))
   const eventDamageMult = todayEvent?.effect?.type === 'damage_mult' ? todayEvent.effect.value : 1
@@ -82,50 +85,60 @@ export function AdventureProvider({ children }) {
   // Uhr für Quest-Ablauf
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60 * 1000); return () => clearInterval(t) }, [])
 
-  // ---------------- LADEN ----------------
+  // ---------------- LADEN (Cache-first + Offline-Fallback) ----------------
+  const buildFreshBoss = useCallback(() => {
+    const b = getBossForWeek(weekStart)
+    const communitySeed = (weekStart.split('-').reduce((a, c) => a + parseInt(c, 10), 0) * 37) % 400
+    return { weekStart, name: b.name, icon: b.icon, image: b.image, maxHp: b.maxHp, hp: b.maxHp, myDamage: 0, communityDamage: communitySeed, defeated: false, looted: false }
+  }, [weekStart])
+
+  const loadRemote = useCallback(async () => {
+    const [inventory, { bossRow, dmgRow }, arenaRows, questCompletions, slots, monsters, team] = await Promise.all([
+      fetchInventory(user.id),
+      fetchBoss(user.id, weekStart),
+      fetchArena(user.id, weekStart),
+      fetchQuestCompletions(user.id),
+      fetchLoadout(user.id, weekStart),
+      fetchUserMonsters(user.id),
+      fetchUserTeam(user.id),
+    ])
+    const base = getBossForWeek(weekStart)
+    const totalDamage = bossRow?.total_damage || 0
+    const myDamage = dmgRow?.damage || 0
+    const maxHp = bossRow?.max_hp || base.maxHp
+    const boss = {
+      weekStart, name: bossRow?.name || base.name, icon: bossRow?.icon || base.icon,
+      image: base.image,
+      maxHp, hp: Math.max(0, maxHp - totalDamage),
+      myDamage, communityDamage: Math.max(0, totalDamage - myDamage),
+      defeated: bossRow?.defeated || totalDamage >= maxHp, looted: !!dmgRow?.looted,
+    }
+    const wins = arenaRows.filter((a) => a.won).length
+    const losses = arenaRows.length - wins
+    const newState = {
+      inventory, boss,
+      arena: { weekStart, wins, losses, history: arenaRows.map((a) => ({ id: a.id, opponent: a.opponent_name, won: a.won, at: a.created_at })) },
+      craftCount: 0, questCompletions,
+      loadout: { weekStart, slots: slots || {} },
+    }
+    setState(newState)
+    setUserMonsters(monsters)
+    const newTeam = team ? { slot_1: team.slot_1, slot_2: team.slot_2, slot_3: team.slot_3 } : { slot_1: null, slot_2: null, slot_3: null }
+    if (team) setUserTeam(newTeam)
+    setLoaded(true)
+    // Erfolgreichen Remote-Stand cachen für nächstes Offline-Öffnen
+    saveCache('adventure_' + user.id, { state: newState, userMonsters: monsters, userTeam: newTeam })
+  }, [user, weekStart])
+
   useEffect(() => {
     if (!user) { setLoaded(false); return }
-    let cancelled = false
 
-    const buildFreshBoss = () => {
-      const b = getBossForWeek(weekStart)
-      const communitySeed = (weekStart.split('-').reduce((a, c) => a + parseInt(c, 10), 0) * 37) % 400
-      return { weekStart, name: b.name, icon: b.icon, image: b.image, maxHp: b.maxHp, hp: b.maxHp, myDamage: 0, communityDamage: communitySeed, defeated: false, looted: false }
-    }
-
-    async function loadRemote() {
-      const [inventory, { bossRow, dmgRow }, arenaRows, questCompletions, slots, monsters, team] = await Promise.all([
-        fetchInventory(user.id),
-        fetchBoss(user.id, weekStart),
-        fetchArena(user.id, weekStart),
-        fetchQuestCompletions(user.id),
-        fetchLoadout(user.id, weekStart),
-        fetchUserMonsters(user.id),
-        fetchUserTeam(user.id),
-      ])
-      if (cancelled) return
-      const base = getBossForWeek(weekStart)
-      const totalDamage = bossRow?.total_damage || 0
-      const myDamage = dmgRow?.damage || 0
-      const maxHp = bossRow?.max_hp || base.maxHp
-      const boss = {
-        weekStart, name: bossRow?.name || base.name, icon: bossRow?.icon || base.icon,
-        image: base.image,
-        maxHp, hp: Math.max(0, maxHp - totalDamage),
-        myDamage, communityDamage: Math.max(0, totalDamage - myDamage),
-        defeated: bossRow?.defeated || totalDamage >= maxHp, looted: !!dmgRow?.looted,
-      }
-      const wins = arenaRows.filter((a) => a.won).length
-      const losses = arenaRows.length - wins
-      setState({
-        inventory, boss,
-        arena: { weekStart, wins, losses, history: arenaRows.map((a) => ({ id: a.id, opponent: a.opponent_name, won: a.won, at: a.created_at })) },
-        craftCount: 0, questCompletions,
-        loadout: { weekStart, slots: slots || {} },
-      })
-      setUserMonsters(monsters)
-      if (team) setUserTeam({ slot_1: team.slot_1, slot_2: team.slot_2, slot_3: team.slot_3 })
-      setLoaded(true)
+    // Cache-Snapshot sofort anzeigen (auch im Remote-Modus – verhindert "alles leer" offline)
+    const cached = loadCache('adventure_' + user.id)
+    if (cached) {
+      if (cached.state) setState((s) => ({ ...s, ...cached.state }))
+      if (cached.userMonsters) setUserMonsters(cached.userMonsters)
+      if (cached.userTeam) setUserTeam(cached.userTeam)
     }
 
     function loadLocal() {
@@ -134,7 +147,6 @@ export function AdventureProvider({ children }) {
         const raw = localStorage.getItem(storageKey(user.id))
         if (raw) {
           const parsed = JSON.parse(raw)
-          // Inventar NIEMALS auf leer zurücksetzen – nur überschreiben wenn tatsächlich vorhanden
           if (parsed.inventory && Array.isArray(parsed.inventory)) {
             data.inventory = parsed.inventory
           }
@@ -144,7 +156,6 @@ export function AdventureProvider({ children }) {
           if (parsed.loadout && parsed.loadout.weekStart === weekStart) data.loadout = parsed.loadout
           if (parsed.craftCount != null) data.craftCount = parsed.craftCount
         } else {
-          // Versuche Backup-Key (ältere Daten wiederherstellen)
           const backup = localStorage.getItem(storageKey(user.id) + '_backup')
           if (backup) {
             const parsed = JSON.parse(backup)
@@ -153,7 +164,7 @@ export function AdventureProvider({ children }) {
             if (parsed.questCompletions) data.questCompletions = parsed.questCompletions
           }
         }
-      } catch { /* ignore – starte mit default aber Inventar aus Backup */ 
+      } catch { 
         try {
           const backup = localStorage.getItem(storageKey(user.id) + '_backup')
           if (backup) {
@@ -169,11 +180,26 @@ export function AdventureProvider({ children }) {
       setState(data); setLoaded(true)
     }
 
-    if (REMOTE) loadRemote().catch((e) => { console.warn('Adventure remote load:', e.message); loadLocal() })
-    else loadLocal()
+    if (!navigator.onLine) {
+      // Offline: bei der Cache-Hydration oben bleiben, nichts remote versuchen
+      setLoaded(true)
+    } else if (REMOTE) {
+      loadRemote().catch((e) => { console.warn('Adventure remote load:', e.message); loadLocal() })
+    } else {
+      loadLocal()
+    }
+  }, [user, weekStart, buildFreshBoss, loadRemote])
 
-    return () => { cancelled = true }
-  }, [user, weekStart])
+  // ---------------- RECONNECT: Remote-Stand nachladen, sobald Internet zurück ----
+  const wasOnlineRef = useRef(isOnline)
+  useEffect(() => {
+    if (!user || !REMOTE) return
+    if (isOnline && !wasOnlineRef.current) {
+      // Übergang offline → online: veralteten Cache durch echte Serverdaten ersetzen
+      loadRemote().catch((e) => console.warn('Adventure reconnect reload:', e.message))
+    }
+    wasOnlineRef.current = isOnline
+  }, [isOnline, user, REMOTE, loadRemote])
 
   // ---------------- SPEICHERN (nur lokal + Backup) ----------------
   useEffect(() => {

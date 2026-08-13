@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { MOVES, TYPE_CHART, MONSTER_MAP, getMonsterImageUrl } from '../utils/monsters'
 import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
 import { Swords, Heart, Zap, Sparkles, AlertCircle, Trophy, Star, X } from 'lucide-react'
+import DamageNumber from './DamageNumber'
+import { fireCatchConfetti } from '../utils/catchConfetti'
 
 const XpPopup = ({ xp, onDone }) => {
   useEffect(() => {
@@ -36,6 +38,8 @@ export default function MonsterBattle() {
   const [battleResult, setBattleResult] = useState(null) // null | 'won' | 'lost'
   const [xpGained, setXpGained] = useState(0)
   const [showXpPopup, setShowXpPopup] = useState(false)
+  const [dmgNumbers, setDmgNumbers] = useState([]) // [{id, value, isCrit, x, y}]
+  const [showImpactFlash, setShowImpactFlash] = useState(false)
   const catchAttempted = useRef(false)
 
   useEffect(() => {
@@ -156,6 +160,15 @@ export default function MonsterBattle() {
     setAnimEffect('hit-enemy')
     setTimeout(() => setAnimEffect(null), 500)
 
+    // B1: Schwebe-Schadenszahl
+    const dmgId = Date.now()
+    setDmgNumbers(prev => [...prev, { id: dmgId, value: dmg, isCrit, x: window.innerWidth * 0.7, y: window.innerHeight * 0.3 }])
+    // B3: Impact-Flash bei kritischem Treffer
+    if (isCrit) {
+      setShowImpactFlash(true)
+      setTimeout(() => setShowImpactFlash(false), 300)
+    }
+
     let msg = `${playerMonster.nickname || MONSTER_MAP[playerMonster.monster_id]?.name || playerMonster.monster_id} nutzt ${move.name}!`
     if (isCrit) { msg += " KRITISCHER TREFFER!"; vibrate(VIBRATION_PATTERNS.CRIT); }
     if (isStrong) msg += " Sehr effektiv!"
@@ -187,6 +200,10 @@ export default function MonsterBattle() {
     setAnimEffect('hit-player')
     setTimeout(() => setAnimEffect(null), 500)
 
+    // B1: Schwebe-Schadenszahl für Spieler-Treffer
+    const dmgId = Date.now() + 1
+    setDmgNumbers(prev => [...prev, { id: dmgId, value: dmg, isCrit, x: window.innerWidth * 0.3, y: window.innerHeight * 0.5 }])
+
     setBattleLog(prev => [`${activeMiniBoss.name} nutzt ${move.name}! (-${dmg} HP)`, ...prev])
     
     if (newPlayerHp <= 0) {
@@ -214,6 +231,7 @@ export default function MonsterBattle() {
 
     if (Math.random() < catchRate) {
       vibrate(VIBRATION_PATTERNS.LEVEL_UP)
+      fireCatchConfetti() // Teil C: Fang-Konfetti
       setBattleLog(prev => [`✅ Erfolg! ${activeMiniBoss.name} wurde gefangen!`, ...prev])
       grantVictoryXp(playerMonster)
       setShowXpPopup(true)
@@ -231,7 +249,14 @@ export default function MonsterBattle() {
   const handleDismiss = () => setActiveMiniBoss(null)
 
   return (
-    <div className="fixed inset-0 z-[100] bg-dark-500 flex flex-col overflow-hidden animate-fade-in">
+    <div className={`fixed inset-0 z-[100] bg-dark-500 flex flex-col overflow-hidden animate-fade-in ${animEffect ? 'animate-shake' : ''}`}>
+      {/* B3: Impact-Flash bei kritischem Treffer */}
+      {showImpactFlash && <div className="impact-flash-gold" />}
+      {/* B1: Schwebe-Schadenszahlen */}
+      {dmgNumbers.map(d => (
+        <DamageNumber key={d.id} value={d.value} isCrit={d.isCrit} x={d.x} y={d.y}
+          onDone={() => setDmgNumbers(prev => prev.filter(n => n.id !== d.id))} />
+      ))}
       {/* HEADER */}
       <div className="p-4 flex justify-between items-center border-b border-gray-800">
         <h2 className="font-title text-gold-400">Monster Kampf</h2>
@@ -243,7 +268,7 @@ export default function MonsterBattle() {
         {showXpPopup && <XpPopup xp={xpGained} onDone={() => setShowXpPopup(false)} />}
 
         {/* ENEMY */}
-        <div className={`flex justify-end pr-4 transition-all duration-300 ${animEffect === 'hit-enemy' ? 'scale-90 opacity-50' : ''} ${battleResult === 'won' ? 'opacity-30 scale-75' : ''}`}>
+        <div className={`flex justify-end pr-4 transition-all duration-300 ${animEffect === 'hit-enemy' ? 'scale-90 opacity-50' : ''} ${battleResult === 'won' ? 'opacity-30 scale-75' : ''} ${isCapturing ? 'animate-wobble' : ''}`}>
            <div className="card w-64 border-red-900/40 relative bg-dark-400/80">
               <div className="absolute -top-16 -left-12 w-32 h-32 overflow-hidden rounded-full border-2 border-red-500/30">
                  <img src={getMonsterImageUrl(activeMiniBoss)} alt="Monster" className="w-full h-full object-cover" />
