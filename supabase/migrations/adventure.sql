@@ -210,9 +210,11 @@ CREATE TABLE IF NOT EXISTS user_monsters (
   moves JSONB DEFAULT '[]',
   affection INTEGER DEFAULT 100,          -- Zuneigung 0-100
   last_interaction TIMESTAMPTZ DEFAULT NOW(),
+  last_decay TIMESTAMPTZ,                 -- letzter Verfall-Check (zeitbasiert)
   caught_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE user_monsters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_monsters ADD COLUMN IF NOT EXISTS last_decay TIMESTAMPTZ;
 DROP POLICY IF EXISTS "UM lesen" ON user_monsters;    CREATE POLICY "UM lesen"    ON user_monsters FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "UM schreiben" ON user_monsters; CREATE POLICY "UM schreiben" ON user_monsters FOR INSERT WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "UM aendern" ON user_monsters;  CREATE POLICY "UM aendern"  ON user_monsters FOR UPDATE USING (auth.uid() = user_id);

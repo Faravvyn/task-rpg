@@ -5,7 +5,8 @@ import { Shield, Swords, Plus, CheckCircle2, Zap, Heart, Star, Info, Trash2, Bon
 import { updateMonster } from '../lib/adventureRepo'
 
 export default function MonsterPage() {
-  const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster, setUserMonsters } = useAdventure()
+  const { userMonsters, userTeam, updateTeam, spawnMiniBoss, interactWithMonster, deleteMonster, setUserMonsters,
+    startPetChallenge, getPetChallengeProgress, completePetChallenge, cancelPetChallenge } = useAdventure()
   const [selectingFor, setSelectingFor] = useState(null) // slot_1, slot_2, slot_3
   const [inspecting, setInspecting] = useState(null) // monsterUid
   const [view, setView] = useState('team') // team | lexicon
@@ -91,7 +92,31 @@ export default function MonsterPage() {
 
               {/* Interaction Buttons */}
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => interactWithMonster(inspectedMonster.id, 'pet')} className="btn-secondary py-2 text-xs flex items-center justify-center gap-2"><HandHeart className="w-3 h-3"/> Streicheln (500m Walk)</button>
+                {(() => {
+                  const progress = getPetChallengeProgress(inspectedMonster.id)
+                  if (!progress) {
+                    return (
+                      <button onClick={() => startPetChallenge(inspectedMonster.id)} className="btn-secondary py-2 text-xs flex items-center justify-center gap-2">
+                        <HandHeart className="w-3 h-3"/> Streicheln starten (500m laufen)
+                      </button>
+                    )
+                  }
+                  if (progress.done) {
+                    return (
+                      <button onClick={() => completePetChallenge(inspectedMonster.id)} className="btn-primary py-2 text-xs flex items-center justify-center gap-2 animate-pulse-gold">
+                        <HandHeart className="w-3 h-3"/> Geschafft! Streicheln ✅
+                      </button>
+                    )
+                  }
+                  return (
+                    <button onClick={() => cancelPetChallenge(inspectedMonster.id)} className="btn-secondary py-2 text-xs flex flex-col items-center justify-center gap-1 opacity-70" title="Zum Abbrechen tippen">
+                      <span>🚶 {progress.walked} / {progress.required} Schritte</span>
+                      <div className="w-full h-1 bg-dark-500 rounded-full overflow-hidden">
+                        <div className="h-full bg-gold-500" style={{ width: `${Math.min(100, (progress.walked / progress.required) * 100)}%` }} />
+                      </div>
+                    </button>
+                  )
+                })()}
                 <button onClick={() => interactWithMonster(inspectedMonster.id, 'feed')} className="btn-secondary py-2 text-xs flex items-center justify-center gap-2"><Bone className="w-3 h-3"/> Füttern (10 Situps)</button>
               </div>
               

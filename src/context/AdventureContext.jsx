@@ -37,6 +37,7 @@ import {
   updateMonster, releaseMonster
 } from '../lib/adventureRepo'
 import { MONSTERS, MONSTER_MAP, calculateMonsterXpForLevel } from '../utils/monsters'
+import { vibrate, VIBRATION_PATTERNS } from '../utils/vibrate'
 
 const AdventureContext = createContext({})
 
@@ -78,6 +79,8 @@ export function AdventureProvider({ children }) {
   const [userMonsters, setUserMonsters] = useState([])
   const [userTeam, setUserTeam] = useState({ slot_1: null, slot_2: null, slot_3: null })
   const [activeMiniBoss, setActiveMiniBoss] = useState(null)
+  const [petChallenges, setPetChallenges] = useState({}) // { [monsterUid]: { startSteps, startAt } }
+  const STEPS_FOR_PET = 650 // 500m ≈ 650 Schritte bei ⌀ 0,77m Schrittlänge
 
   const charRef = useRef(character)
   useEffect(() => { charRef.current = character }, [character])
@@ -115,19 +118,40 @@ export function AdventureProvider({ children }) {
     }
     const wins = arenaRows.filter((a) => a.won).length
     const losses = arenaRows.length - wins
-    const newState = {
-      inventory, boss,
-      arena: { weekStart, wins, losses, history: arenaRows.map((a) => ({ id: a.id, opponent: a.opponent_name, won: a.won, at: a.created_at })) },
-      craftCount: 0, questCompletions,
-      loadout: { weekStart, slots: slots || {} },
-    }
-    setState(newState)
+
+    // Inventar mergen statt hart überschreiben (verhindert "verschwindende" Artefakte)
+    setState((prevState) => {
+      const serverUids = new Set(inventory.map(i => i.uid))
+      const now = Date.now()
+      // Lokale Einträge, die der Server noch nicht kennt, aber jünger als 2 Min sind: behalten
+      const recentLocalOnly = (prevState.inventory || []).filter(i =>
+        !serverUids.has(i.uid) &&
+        i.obtainedAt && (now - new Date(i.obtainedAt).getTime()) < 2 * 60 * 1000
+      )
+      // Lokal erst kürzlich geänderter equipped/protected-Status gewinnt für 2 Min
+      const mergedInventory = inventory.map(serverItem => {
+        const local = (prevState.inventory || []).find(i => i.uid === serverItem.uid)
+        if (local?._localTouchedAt && (now - local._localTouchedAt) < 2 * 60 * 1000) {
+          return { ...serverItem, equipped: local.equipped, protected: local.protected }
+        }
+        return serverItem
+      })
+
+      const newState = {
+        inventory: [...mergedInventory, ...recentLocalOnly],
+        boss,
+        arena: { weekStart, wins, losses, history: arenaRows.map((a) => ({ id: a.id, opponent: a.opponent_name, won: a.won, at: a.created_at })) },
+        craftCount: 0, questCompletions,
+        loadout: { weekStart, slots: slots || {} },
+      }
+      const newTeam = team ? { slot_1: team.slot_1, slot_2: team.slot_2, slot_3: team.slot_3 } : { slot_1: null, slot_2: null, slot_3: null }
+      saveCache('adventure_' + user.id, { state: newState, userMonsters: monsters, userTeam: newTeam })
+      return newState
+    })
     setUserMonsters(monsters)
     const newTeam = team ? { slot_1: team.slot_1, slot_2: team.slot_2, slot_3: team.slot_3 } : { slot_1: null, slot_2: null, slot_3: null }
     if (team) setUserTeam(newTeam)
     setLoaded(true)
-    // Erfolgreichen Remote-Stand cachen für nächstes Offline-Öffnen
-    saveCache('adventure_' + user.id, { state: newState, userMonsters: monsters, userTeam: newTeam })
   }, [user, weekStart])
 
   useEffect(() => {
@@ -324,24 +348,22 @@ export function AdventureProvider({ children }) {
       if (!target) return s
       const art = getArtifact(target.artifactId)
       const slot = slotForArtifact(art)
-      
-      // Validierung: Nur in den richtigen Slot erlauben
-      // (Wird hier beim automatischen Slot-Binding erzwungen)
+      const touchedAt = Date.now()
 
       const inventory = s.inventory.map((i) => {
-        if (i.uid === uid) return { ...i, equipped: equip }
+        if (i.uid === uid) return { ...i, equipped: equip, _localTouchedAt: touchedAt }
         // Beim Ausrüsten: anderes Artefakt im selben Slot automatisch ablegen
         if (equip && i.equipped && slotForArtifact(getArtifact(i.artifactId)) === slot) {
           unequippedUid = i.uid
-          return { ...i, equipped: false }
+          return { ...i, equipped: false, _localTouchedAt: touchedAt }
         }
         return i
       })
       return { ...s, inventory }
     })
     if (REMOTE) {
-      updateArtifact(uid, { equipped: equip })
-      if (unequippedUid) updateArtifact(unequippedUid, { equipped: false })
+      updateArtifact(uid, { equipped: equip }).catch(e => console.warn('Equip-Sync fehlgeschlagen:', e.message))
+      if (unequippedUid) updateArtifact(unequippedUid, { equipped: false }).catch(() => {})
     }
   }, [REMOTE])
 
@@ -352,10 +374,10 @@ export function AdventureProvider({ children }) {
       const count = s.inventory.filter((i) => i.protected).length
       if (!item.protected && count >= MAX_PROTECTED_ARTIFACTS) return s
       willProtect = !item.protected
-      return { ...s, inventory: s.inventory.map((i) => i.uid === uid ? { ...i, protected: willProtect } : i) }
+      return { ...s, inventory: s.inventory.map((i) => i.uid === uid ? { ...i, protected: willProtect, _localTouchedAt: Date.now() } : i) }
     })
-    if (REMOTE && willProtect !== null) updateArtifact(uid, { protected: willProtect })
-  }, [])
+    if (REMOTE && willProtect !== null) updateArtifact(uid, { protected: willProtect }).catch(e => console.warn('Protect-Sync fehlgeschlagen:', e.message))
+  }, [REMOTE])
 
   // ---------------- Boss ----------------
   const dealBossDamage = useCallback((difficulty) => {
@@ -736,47 +758,72 @@ export function AdventureProvider({ children }) {
     return boss
   }, [])
 
-  // ---------------- Monster Affection / Decay ----------------
-  const monstersRef = useRef(userMonsters)
-  useEffect(() => { monstersRef.current = userMonsters }, [userMonsters])
-  
+  // ---------------- Monster Affection / Decay (zeitbasiert) ----------------
+  const decayCheckRef = useRef(0)
   useEffect(() => {
-    if (!loaded) return
-    const interval = setInterval(() => {
-      const current = monstersRef.current
-      if (!current.length) return
-      
-      let changed = false
-      const next = current.map(m => {
-        const aff = m.affection ?? 100
-        if (aff > 0) {
-          changed = true
-          const newAff = Math.max(0, aff - 1)
-          if (REMOTE) {
-            try { updateMonster(m.id, { affection: newAff }) } catch {}
-          }
-          return { ...m, affection: newAff }
-        }
-        return m
-      })
-      
-      if (changed) {
-        setUserMonsters(next)
-      }
-    }, 1000 * 60 * 60) // -1 Affection pro Stunde
-    
-    return () => clearInterval(interval)
-  }, [loaded, REMOTE])
+    if (!loaded || !userMonsters.length) return
+    const now = Date.now()
+    if (now - decayCheckRef.current < 5 * 60 * 1000) return // max alle 5 Min prüfen
+    decayCheckRef.current = now
+
+    let changed = false
+    const next = userMonsters.map(m => {
+      const aff = m.affection ?? 100
+      if (aff <= 0) return m
+      const lastRef = m.last_decay || m.last_interaction || m.caught_at
+      if (!lastRef) return m
+      const hoursPassed = (now - new Date(lastRef).getTime()) / (1000 * 60 * 60)
+      if (hoursPassed < 1) return m
+      const decayAmount = Math.floor(hoursPassed) // 1 Punkt pro voller Stunde
+      if (decayAmount <= 0) return m
+      changed = true
+      const newAff = Math.max(0, aff - decayAmount)
+      const update = { affection: newAff, last_decay: new Date().toISOString() }
+      if (REMOTE) { updateMonster(m.id, update).catch(() => {}) }
+      return { ...m, ...update }
+    })
+
+    if (changed) setUserMonsters(next)
+  }, [loaded, userMonsters, REMOTE])
 
   const interactWithMonster = useCallback(async (monsterUid, type = 'pet') => {
     const m = userMonsters.find(it => it.id === monsterUid)
     if (!m) return
     const bonus = type === 'feed' ? 20 : 10
     const newAff = Math.min(100, (m.affection || 0) + bonus)
-    setUserMonsters(prev => prev.map(it => it.id === monsterUid ? { ...it, affection: newAff, last_interaction: new Date().toISOString() } : it))
-    if (REMOTE) await updateMonster(monsterUid, { affection: newAff, last_interaction: new Date().toISOString() })
+    const nowIso = new Date().toISOString()
+    setUserMonsters(prev => prev.map(it => it.id === monsterUid ? { ...it, affection: newAff, last_interaction: nowIso, last_decay: nowIso } : it))
+    if (REMOTE) await updateMonster(monsterUid, { affection: newAff, last_interaction: nowIso, last_decay: nowIso })
     vibrate(VIBRATION_PATTERNS.SUCCESS)
   }, [userMonsters, REMOTE])
+
+  // ---------------- Pet-Challenge (500m laufen fürs Streicheln) ----------------
+  const startPetChallenge = useCallback((monsterUid) => {
+    if (!character) return
+    setPetChallenges(prev => ({
+      ...prev,
+      [monsterUid]: { startSteps: character.total_steps || 0, startAt: Date.now() }
+    }))
+  }, [character])
+
+  const getPetChallengeProgress = useCallback((monsterUid) => {
+    const ch = petChallenges[monsterUid]
+    if (!ch || !character) return null
+    const walked = Math.max(0, (character.total_steps || 0) - ch.startSteps)
+    return { walked, required: STEPS_FOR_PET, done: walked >= STEPS_FOR_PET }
+  }, [petChallenges, character])
+
+  const completePetChallenge = useCallback(async (monsterUid) => {
+    const progress = getPetChallengeProgress(monsterUid)
+    if (!progress || !progress.done) return false
+    await interactWithMonster(monsterUid, 'pet')
+    setPetChallenges(prev => { const next = { ...prev }; delete next[monsterUid]; return next })
+    return true
+  }, [getPetChallengeProgress, interactWithMonster])
+
+  const cancelPetChallenge = useCallback((monsterUid) => {
+    setPetChallenges(prev => { const next = { ...prev }; delete next[monsterUid]; return next })
+  }, [])
 
   // ---------------- DEV / Demo ----------------
   const grantRandomArtifact = useCallback((minRarity = 'common') => addArtifact(rollArtifact(minRarity).id, 'quest'), [addArtifact])
@@ -800,7 +847,8 @@ export function AdventureProvider({ children }) {
     userMonsters, userTeam, activeMiniBoss, setActiveMiniBoss, catchMonster, updateTeam, spawnMiniBoss, setUserMonsters,
     allMonsters: MONSTERS, monsterMap: MONSTER_MAP,
     claimStepReward, syncSteps,
-    interactWithMonster, deleteMonster
+    interactWithMonster, deleteMonster,
+    startPetChallenge, getPetChallengeProgress, completePetChallenge, cancelPetChallenge
   }
 
   async function claimStepReward() {
